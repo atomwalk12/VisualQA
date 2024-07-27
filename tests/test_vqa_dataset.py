@@ -1,29 +1,27 @@
 from PIL.Image import Image
+import pytest
 from ..lib.datasets_vqa.easyvqa import EasyVQADataset
 from ..lib.types import EasyVQAElement
 
 
-def test_load_dataset():
+@pytest.fixture(scope="module")
+def initialized_dataset():
+    wrapper = EasyVQADataset()
+    wrapper.initialize()
+    return wrapper
+
+def test_load_dataset(initialized_dataset):
     """
     Testing Dataset initialization
     """
-    wrapper = EasyVQADataset()
-    wrapper.initialize()
+    assert len(initialized_dataset.dataset) > 0
 
-    assert len(wrapper.dataset) > 0
-
-
-def test_get_item():
+def test_get_item(initialized_dataset):
     """
     Testing retrieval of dataset item
     """
-    wrapper = EasyVQADataset()
-    wrapper.initialize()
-    assert isinstance(wrapper[0], EasyVQAElement)
+    assert isinstance(initialized_dataset[0], EasyVQAElement)
 
-
-def test_dataset_fields():
-    wrapper = EasyVQADataset()
-    wrapper.initialize()
-    element: EasyVQAElement = wrapper[0]
+def test_dataset_fields(initialized_dataset):
+    element: EasyVQAElement = initialized_dataset[0]
     assert isinstance(element.image, Image)
