@@ -1,7 +1,9 @@
 import logging
 
-from easy_vqa import get_train_questions
+from easy_vqa import get_train_image_paths, get_train_questions
+from PIL import Image
 from torch.utils.data import Dataset
+
 from ..types import EasyVQAElement
 
 logger = logging.getLogger(__name__)
@@ -17,14 +19,14 @@ class EasyVQADataset(Dataset):
         """Method to initialize the dataset"""
 
         questions = get_train_questions()
+        images = get_train_image_paths()
 
-        # Use zip to combine elements at corresponding positions
-        zipped_elements = zip(*questions)
+        # Combine and process elements
+        self.dataset: Dataset[EasyVQAElement] = [
+            self._translate(elements, images[elements[2]])
+            for elements in zip(*questions)
+        ]
 
-        # Use map to apply the process_elements function to each tuple of elements
-        processed_results = list(map(self._translate, zipped_elements))
-
-        self.dataset = processed_results
 
     def __getitem__(self, index: int) -> dict:
         """
@@ -36,5 +38,16 @@ class EasyVQADataset(Dataset):
         """
         return self.dataset[index]
 
-    def _translate(self, item: str):
-        return EasyVQAElement()
+    def _translate(self, item, image_path):
+        """
+        Translates the raw data retrieved from the data into a EasyVQAElement.
+
+        Args:
+            item (str): The retrieved raw data
+
+        Returns:
+            EasyVQAElement: An element of the dataset
+        """
+        return EasyVQAElement(
+            question=item[0], answer=item[1], image_id=item[2], image_path=image_path, image=Image.open(image_path)
+        )
