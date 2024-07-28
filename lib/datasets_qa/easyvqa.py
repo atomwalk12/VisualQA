@@ -1,6 +1,6 @@
 import logging
 
-from easy_vqa import get_train_image_paths, get_train_questions
+from easy_vqa import get_train_image_paths, get_train_questions, get_test_questions, get_test_image_paths
 from PIL import Image
 from torch.utils.data import Dataset
 
@@ -14,21 +14,24 @@ class EasyVQADataset(Dataset):
     _dataset: Dataset
     ready_for_training: bool = False
 
-    def __init__(self, split, classify=False, initialize_raw=True):
+    def __init__(self, split, classify=False):
         super().__init__()
         self.classify = classify
 
         # can be train or val
         self.split = split
 
-        if initialize_raw:
-            self.initialize_raw()
+        self.initialize_raw()
 
     def initialize_raw(self):
         """Method to initialize the dataset"""
 
-        questions = get_train_questions()
-        images = get_train_image_paths()
+        if self.split == 'train':
+            questions = get_train_questions()
+            images = get_train_image_paths()
+        elif self.split == 'val':
+            questions = get_test_questions()
+            images = get_test_image_paths()
 
         # Combine and process elements
         self.raw_dataset: Dataset[EasyVQARawElement] = [

@@ -6,7 +6,7 @@ from ..lib.types import EasyVQAElement
 
 @pytest.fixture(scope="module")
 def initialized_dataset():
-    wrapper = EasyVQADataset(split="train", initialize_raw=True)
+    wrapper = EasyVQADataset(split="train")
     wrapper.initialize_for_training()
     return wrapper
 
