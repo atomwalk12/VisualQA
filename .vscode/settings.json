@@ -1,0 +1,15 @@
+{
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    // Uncomment the following code to enable coverage.
+    // This will break debugging tests.
+    // "python.testing.pytestArgs": [
+    //     "-v",
+    //     "--cov=.",
+    //     "--cov-report=xml",
+    //     "--pdb",
+    //     "tests/"
+    // ],
+    "coverage-gutters.showGutterCoverage": false,
+    "coverage-gutters.showLineCoverage": true,
+}
