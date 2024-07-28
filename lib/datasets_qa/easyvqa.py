@@ -4,7 +4,7 @@ from easy_vqa import get_train_image_paths, get_train_questions
 from PIL import Image
 from torch.utils.data import Dataset
 
-from ..types import EasyVQAElement
+from ...ckpt.lib.types import EasyVQAElement
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,8 @@ class EasyVQADataset(Dataset):
             for elements in zip(*questions)
         ]
 
+    def __len__(self) -> int:
+        return len(self.dataset)
 
     def __getitem__(self, index: int) -> dict:
         """

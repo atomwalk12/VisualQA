@@ -1,5 +1,6 @@
-from PIL.Image import Image
 import pytest
+from PIL.Image import Image
+
 from ..lib.datasets_vqa.easyvqa import EasyVQADataset
 from ..lib.types import EasyVQAElement
 
@@ -25,12 +26,22 @@ def test_get_item(initialized_dataset):
     assert isinstance(initialized_dataset[0], EasyVQAElement)
 
 
-def test_get_image(initialized_dataset):
+def test_check_item(initialized_dataset):
     """
-    Testing retrieval of an image
+    Testing retrieval of an image with associated information
     """
     element: EasyVQAElement = initialized_dataset[0]
+    check_element(element)
 
+
+def test_iterate(initialized_dataset):
+    elements = initialized_dataset[:10]
+
+    for element in elements:
+        check_element(element)
+
+
+def check_element(element):
     assert len(element.answer) > 0
     assert len(element.question) > 0
     assert len(element.image_path) > 0
