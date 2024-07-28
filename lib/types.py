@@ -1,10 +1,14 @@
 from dataclasses import dataclass
 
 from torch.utils.data import Dataset
+from transformers import AutoProcessor, AutoModel
 
 
 @dataclass
-class ModuleConfig():
+class ModuleConfig:
     train_dataset: Dataset
     val_dataset: Dataset
-    batch_size: int
+    processor: AutoProcessor
+    model: AutoModel
+    batch_size: int = 7
+    max_length: int = 25

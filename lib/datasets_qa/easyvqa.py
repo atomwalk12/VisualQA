@@ -91,8 +91,11 @@ class EasyVQADataset(TorchDataset):
         """Prepare the dataset for training"""
 
         logger.info("Preparing data for training")
+        columns_to_remove = self.raw_dataset.column_names
+        columns_to_remove.remove('image')
         self._dataset = self.raw_dataset.map(
-            lambda item: self._prepared_for_training(item)
+            lambda item: self._prepared_for_training(item),
+            remove_columns=columns_to_remove
         )
         self.ready_for_training = True
 
@@ -128,7 +131,7 @@ class EasyVQADataset(TorchDataset):
         else:
             raise Exception(f"Flag {self.split} not recognized.")
 
-        return {"question": prompt, "label": label}
+        return {"prompt": prompt, "label": label}
 
     def save(self, out: str):
         """Utility used for saving the dataset at the given output path.

@@ -19,16 +19,18 @@ def initialize_val_dataset():
 
 def test_get_train_item(initialize_train_dataset: EasyVQADataset):
     element = initialize_train_dataset[0]
-
-    assert element["label"] is not None
-    assert element["question"] is not None
+    check_properties(element)
 
 
 def test_get_val_item(initialize_val_dataset: EasyVQADataset):
     element = initialize_val_dataset[0]
+    check_properties(element)
 
+
+def check_properties(element):
     assert element["label"] is not None
-    assert element["question"] is not None
+    assert element["prompt"] is not None
+    assert element["image"] is not None
 
 
 def test_get_10_val_items():
@@ -61,6 +63,5 @@ def test_error_thrown_for_nonexistent_file_load():
         train_ds = train_ds.load(dir)
 
     # Since train[:300].pkl does not exist a FileNotFoundError is raised
-    assert (
-        str(exc_info.value).startswith("[Errno 2] No such file or directory:")
-    )
+    assert str(exc_info.value).startswith(
+        "[Errno 2] No such file or directory:")
