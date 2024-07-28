@@ -18,18 +18,19 @@ logger = logging.getLogger(__name__)
 
 
 class EasyVQADataset(TorchDataset):
-    raw_dataset: Dataset
-    _dataset: Dataset
+    raw_dataset: Dataset = None
+    _dataset: Dataset = None
     ready_for_training: bool = False
 
-    def __init__(self, split: str, classify=False):
+    def __init__(self, split: str, classify=False, load_raw=True):
         super().__init__()
         self.classify: bool = classify
 
         # can be train or val
         self.split: str = split
 
-        self.raw_dataset = self.initialize_raw()
+        if load_raw:
+            self.raw_dataset = self.initialize_raw()
 
     def initialize_raw(self):
         """Method to initialize the dataset."""
@@ -130,10 +131,10 @@ class EasyVQADataset(TorchDataset):
         return {"question": prompt, "label": label}
 
     def save(self, out: str):
-        """Utility used for saving the dataset at the given output path. 
+        """Utility used for saving the dataset at the given output path.
 
         Args:
-            out (str): If out is a directory, then the split name is used as 
+            out (str): If out is a directory, then the split name is used as
             the name of the file.
         """
 
@@ -147,20 +148,21 @@ class EasyVQADataset(TorchDataset):
 
         try:
             self.dataset.to_pandas().to_pickle(complete_path)
-            return True
         except TypeError:
             logger.error(f"Was not able to save pickle file at {out}")
-            return False
+            raise
 
     def load(self, out: str):
         """Utility to load the pickle from a given path."""
         complete_path = get_complete_path(out, opt_name=self.split)
 
         try:
-            return Dataset.from_pandas(pd.read_pickle(complete_path))
-        except TypeError:
+            self._dataset = Dataset.from_pandas(pd.read_pickle(complete_path))
+            return self
+        except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {
                          complete_path}")
+            raise
 
     def equals(self, other: Dataset):
         dataset = self.dataset.to_pandas()

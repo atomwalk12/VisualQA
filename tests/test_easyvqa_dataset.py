@@ -20,15 +20,15 @@ def initialize_val_dataset():
 def test_get_train_item(initialize_train_dataset: EasyVQADataset):
     element = initialize_train_dataset[0]
 
-    assert element['label'] is not None
-    assert element['question'] is not None
+    assert element["label"] is not None
+    assert element["question"] is not None
 
 
 def test_get_val_item(initialize_val_dataset: EasyVQADataset):
     element = initialize_val_dataset[0]
 
-    assert element['label'] is not None
-    assert element['question'] is not None
+    assert element["label"] is not None
+    assert element["question"] is not None
 
 
 def test_get_10_val_items():
@@ -38,10 +38,29 @@ def test_get_10_val_items():
 
 
 def test_save_dataset(initialize_train_dataset):
-    out_dir = './data/easyvqa'
-    success = initialize_train_dataset.save(out_dir)
+    dir = "./data/easyvqa"
+    initialize_train_dataset.save(dir)
 
-    assert success
+    vqa_dataset = initialize_train_dataset.load(dir)
+    assert initialize_train_dataset.equals(vqa_dataset.dataset)
 
-    dataset = initialize_train_dataset.load(out_dir)
-    assert initialize_train_dataset.equals(dataset)
+
+def test_load_dataset():
+    dir = "./data/easyvqa"
+    train_ds = EasyVQADataset(split="train")
+
+    vqa_dataset = train_ds.load(dir)
+    assert len(vqa_dataset) > 0
+
+
+def test_error_thrown_for_nonexistent_file_load():
+    dir = "./data/easyvqa"
+    train_ds = EasyVQADataset(split="train[:300]", load_raw=False)
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        train_ds = train_ds.load(dir)
+
+    # Since train[:300].pkl does not exist a FileNotFoundError is raised
+    assert (
+        str(exc_info.value).startswith("[Errno 2] No such file or directory:")
+    )
