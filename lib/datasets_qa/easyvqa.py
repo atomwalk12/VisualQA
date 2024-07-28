@@ -14,30 +14,41 @@ class EasyVQADataset(Dataset):
     _dataset: Dataset
     ready_for_training: bool = False
 
-    def __init__(self, split, classify=False):
+    def __init__(self, split: str, classify=False):
         super().__init__()
-        self.classify = classify
+        self.classify: bool = classify
 
         # can be train or val
-        self.split = split
+        self.split: str = split
 
-        self.initialize_raw()
+        self.raw_dataset = self.initialize_raw()
 
     def initialize_raw(self):
         """Method to initialize the dataset"""
 
-        if self.split == 'train':
+        if self.split.startswith('train'):
             questions = get_train_questions()
             images = get_train_image_paths()
-        elif self.split == 'val':
+        elif self.split.startswith('val'):
             questions = get_test_questions()
             images = get_test_image_paths()
 
+        if '[' in self.split:
+            split, count = self.split.split("[:")
+            count = int(count[:-1])
+        else:
+            count = None
+
         # Combine and process elements
-        self.raw_dataset: Dataset[EasyVQARawElement] = [
+        raw_dataset = [
             self._translate(elements, images[elements[2]])
             for elements in zip(*questions)
         ]
+
+        if count is not None:
+            return raw_dataset[:count]
+        else:
+            return raw_dataset
 
     @property
     def dataset(self):
@@ -102,9 +113,9 @@ class EasyVQADataset(Dataset):
         input_text = item.question
         label = item.answer
 
-        if self.split == 'train':
+        if self.split.startswith('train'):
             prompt = f"Question: {input_text} Answer: {label}."
-        elif self.split == 'val':
+        elif self.split.startswith('val'):
             prompt = f"{input_text}. Answer:"
         else:
             raise Exception(f"Flag {self.split} not recognized.")
