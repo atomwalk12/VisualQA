@@ -35,3 +35,13 @@ def test_get_10_val_items():
     val_ds = EasyVQADataset(split="val[:10]")
     val_ds.initialize_for_training()
     assert len(val_ds) == 10
+
+
+def test_save_dataset(initialize_train_dataset):
+    out_dir = './data/easyvqa'
+    success = initialize_train_dataset.save(out_dir)
+
+    assert success
+
+    dataset = initialize_train_dataset.load(out_dir)
+    assert initialize_train_dataset.equals(dataset)

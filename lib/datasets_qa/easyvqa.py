@@ -1,5 +1,6 @@
 import logging
 
+import pandas as pd
 from easy_vqa import (
     get_test_image_paths,
     get_test_questions,
@@ -11,7 +12,7 @@ from torch.utils.data import Dataset as TorchDataset
 
 from datasets import Dataset
 
-from ..utils import parse_split_slicer
+from ..utils import get_complete_path, parse_split_slicer
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,9 @@ class EasyVQADataset(TorchDataset):
         self.raw_dataset = self.initialize_raw()
 
     def initialize_raw(self):
-        """Method to initialize the dataset"""
+        """Method to initialize the dataset."""
+
+        logger.info("Reading dataset")
 
         if self.split.startswith("train"):
             questions = get_train_questions()
@@ -60,7 +63,7 @@ class EasyVQADataset(TorchDataset):
     def dataset(self):
         if self._dataset is None:
             raise Exception(
-                "Please call transform() before accessing the dataset property"
+                "Please call transform() before accessing the training dataset."
             )
         return self._dataset
 
@@ -84,12 +87,19 @@ class EasyVQADataset(TorchDataset):
             return self.raw_dataset[index]
 
     def initialize_for_training(self):
+        """Prepare the dataset for training"""
+
+        logger.info("Preparing data for training")
         self._dataset = self.raw_dataset.map(
-            lambda item: self._prepare_for_training(item)
+            lambda item: self._prepared_for_training(item)
         )
         self.ready_for_training = True
 
-    def _prepare_for_training(self, item):
+    def _prepared_for_training(self, item: dict):
+        """
+        Prepare a training example. When classify is true the retrieved label
+        represents a number from the answer space instead of simple text.
+        """
         if self.classify:
             return self._classify(item)
         else:
@@ -99,6 +109,14 @@ class EasyVQADataset(TorchDataset):
         raise NotImplementedError()
 
     def _autoregression(self, item: dict):
+        """Generate training example based on textual labels.
+
+        Args:
+            item (dict): Raw item from self.raw_dataset
+
+        Returns:
+            str: An element to be used during training
+        """
         input_text = item["question"]
         label = item["answer"]
 
@@ -111,8 +129,39 @@ class EasyVQADataset(TorchDataset):
 
         return {"question": prompt, "label": label}
 
-    def save(self, out_dir):
-        self.dataset.to_pandas().to_pickle(out_dir)
+    def save(self, out: str):
+        """Utility used for saving the dataset at the given output path. 
 
-    def save(self, out_dir):
-        self.dataset
+        Args:
+            out (str): If out is a directory, then the split name is used as 
+            the name of the file.
+        """
+
+        if not self._prepared_for_training:
+            raise Exception(
+                f"First, call {self._prepared_for_training.__name__}.")
+
+        complete_path = get_complete_path(out, opt_name=self.split)
+
+        logger.info("Saving dataset to %s", complete_path)
+
+        try:
+            self.dataset.to_pandas().to_pickle(complete_path)
+            return True
+        except TypeError:
+            logger.error(f"Was not able to save pickle file at {out}")
+            return False
+
+    def load(self, out: str):
+        """Utility to load the pickle from a given path."""
+        complete_path = get_complete_path(out, opt_name=self.split)
+
+        try:
+            return Dataset.from_pandas(pd.read_pickle(complete_path))
+        except TypeError:
+            logger.error(f"Was not able to load pickle file at {
+                         complete_path}")
+
+    def equals(self, other: Dataset):
+        dataset = self.dataset.to_pandas()
+        return dataset.equals(other.to_pandas())

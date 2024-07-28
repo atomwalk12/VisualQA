@@ -2,3 +2,4 @@ docs
 __pycache__
 .coverage
 ckpt
+data
