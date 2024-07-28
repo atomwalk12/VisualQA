@@ -2,12 +2,17 @@ import pytest
 from PIL.Image import Image
 
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
-from ..lib.types import EasyVQARawElement
+
+
+@pytest.fixture(scope="module")
+def val_raw_dataset():
+    wrapper = EasyVQADataset(split="val")
+    return wrapper
 
 
 @pytest.fixture(scope="module")
 def train_raw_dataset():
-    wrapper = EasyVQADataset(split='train')
+    wrapper = EasyVQADataset(split="train")
     return wrapper
 
 
@@ -22,14 +27,14 @@ def test_get_item(train_raw_dataset: EasyVQADataset):
     """
     Testing retrieval of dataset item
     """
-    assert isinstance(train_raw_dataset[0], EasyVQARawElement)
+    assert isinstance(train_raw_dataset[0], dict)
 
 
 def test_check_item(train_raw_dataset: EasyVQADataset):
     """
     Testing retrieval of an image with associated information
     """
-    element: EasyVQARawElement = train_raw_dataset[0]
+    element: dict = train_raw_dataset[0]
     check_element(element)
 
 
@@ -39,23 +44,29 @@ def test_iterate(train_raw_dataset: EasyVQADataset):
     """
     elements = train_raw_dataset[:10]
 
-    for element in elements:
-        check_element(element)
+    for question, answer, image_id, image_path, image in zip(
+        elements["question"],
+        elements["answer"],
+        elements["image_id"],
+        elements["image_path"],
+        elements["image"],
+    ):
+        assert len(answer) > 0
+        assert len(question) > 0
+        assert len(image_path) > 0
+        assert image_id is not None
+        assert isinstance(image, Image)
 
 
-def check_element(element: EasyVQARawElement):
-    assert len(element.answer) > 0
-    assert len(element.question) > 0
-    assert len(element.image_path) > 0
-    assert element.image_id is not None
-    assert isinstance(element.image, Image)
+def check_element(element: dict):
+    assert len(element["answer"]) > 0
+    assert len(element["question"]) > 0
+    assert len(element["image_path"]) > 0
+    assert element["image_id"] is not None
+    assert isinstance(element["image"], Image)
 
 
-@pytest.fixture(scope="module")
-def val_raw_dataset():
-    wrapper = EasyVQADataset(split='val')
-    return wrapper
-
-
-def test_load_val_dataset(train_raw_dataset: EasyVQADataset, val_raw_dataset: EasyVQADataset):
+def test_load_val_dataset(
+    train_raw_dataset: EasyVQADataset, val_raw_dataset: EasyVQADataset
+):
     assert len(train_raw_dataset) > len(val_raw_dataset)
