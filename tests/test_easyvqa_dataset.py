@@ -11,7 +11,7 @@ def initialized_dataset():
     return wrapper
 
 
-def test_get_item(initialized_dataset):
+def test_get_item(initialized_dataset: EasyVQADataset):
     element: EasyVQAElement = initialized_dataset[0]
 
     assert element.label is not None

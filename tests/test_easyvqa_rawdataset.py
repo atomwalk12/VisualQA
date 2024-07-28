@@ -11,21 +11,21 @@ def initialized_dataset():
     return wrapper
 
 
-def test_load_dataset(initialized_dataset):
+def test_load_dataset(initialized_dataset: EasyVQADataset):
     """
     Testing Dataset initialization
     """
-    assert len(initialized_dataset.dataset) > 0
+    assert len(initialized_dataset.raw_dataset) > 0
 
 
-def test_get_item(initialized_dataset):
+def test_get_item(initialized_dataset: EasyVQADataset):
     """
     Testing retrieval of dataset item
     """
     assert isinstance(initialized_dataset[0], EasyVQARawElement)
 
 
-def test_check_item(initialized_dataset):
+def test_check_item(initialized_dataset: EasyVQADataset):
     """
     Testing retrieval of an image with associated information
     """
@@ -33,7 +33,7 @@ def test_check_item(initialized_dataset):
     check_element(element)
 
 
-def test_iterate(initialized_dataset):
+def test_iterate(initialized_dataset: EasyVQADataset):
     """
     Iterate over the dataset by retrieving a number of elements
     """
@@ -43,7 +43,7 @@ def test_iterate(initialized_dataset):
         check_element(element)
 
 
-def check_element(element):
+def check_element(element: EasyVQARawElement):
     assert len(element.answer) > 0
     assert len(element.question) > 0
     assert len(element.image_path) > 0

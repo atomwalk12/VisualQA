@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class EasyVQADataset(Dataset):
     raw_dataset: Dataset
     _dataset: Dataset
-    ready_for_training: bool
+    ready_for_training: bool = False
 
     def __init__(self, split, classify=False, initialize_raw=True):
         super().__init__()
@@ -50,7 +50,7 @@ class EasyVQADataset(Dataset):
         else:
             return len(self.raw_dataset)
 
-    def __getitem__(self, index: int) -> dict:
+    def __getitem__(self, index: int) -> EasyVQARawElement:
         """
         Returns one item of the dataset.
 
