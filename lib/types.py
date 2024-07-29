@@ -10,5 +10,6 @@ class ModuleConfig:
     val_dataset: Dataset
     processor: AutoProcessor
     model: AutoModel
+    shuffle_train: bool = True
     batch_size: int = 7
     max_length: int = 25

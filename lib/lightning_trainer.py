@@ -17,9 +17,6 @@ class BLIP2PLModule(L.LightningModule):
         self.config = config
         self.processor = self.config.processor
 
-    def collate_fn(self, batch):
-        return batch
-
     def train_dataloader(self):
         assert self.config.train_dataset is not None
         return DataLoader(
@@ -28,7 +25,7 @@ class BLIP2PLModule(L.LightningModule):
                 batch, self.processor, self.config
             ),
             batch_size=self.config.batch_size,
-            shuffle=True,
+            shuffle=self.config.shuffle_train,
             num_workers=0,
         )
 
@@ -36,7 +33,9 @@ class BLIP2PLModule(L.LightningModule):
         assert self.config.val_dataset is not None
         return DataLoader(
             self.config.val_dataset,
-            collate_fn=None,
+            collate_fn=lambda batch: self.eval_collate_fn(
+                batch, self.processor, self.config
+            ),
             batch_size=self.config.batch_size,
             shuffle=False,
             num_workers=0,
@@ -46,9 +45,7 @@ class BLIP2PLModule(L.LightningModule):
     def train_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
         images = []
         texts = []
-        logger.info(processor)
         for item in batch:
-            logger.info(item.get("prompt"))
             texts.append(item.get("prompt"))
             images.append(item.get("image"))
 
@@ -62,3 +59,28 @@ class BLIP2PLModule(L.LightningModule):
         )
 
         return inputs
+
+
+    @staticmethod
+    def eval_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
+        images = []
+        texts = []
+        labels = []
+        for item in batch:
+            texts.append(item.get("prompt"))
+            images.append(item.get("image"))
+            labels.append(item.get("label"))
+
+        inputs = processor(
+            text=texts,
+            images=images,
+            padding=True,
+            truncation=True,
+            max_length=config.max_length,
+            return_tensors="pt",
+        )
+
+        result = {}
+        result["inputs"] = inputs
+        result["labels"] = labels
+        return result

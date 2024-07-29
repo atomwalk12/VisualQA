@@ -7,6 +7,7 @@ from easy_vqa import (
     get_test_questions,
     get_train_image_paths,
     get_train_questions,
+    get_answers
 )
 from PIL import Image
 from torch.utils.data import Dataset as TorchDataset
@@ -29,6 +30,9 @@ class EasyVQADataset(TorchDataset):
 
         # can be train or val
         self.split: str = split
+
+        # Store the answer space for commodity
+        self.answer_space = get_answers()
 
         if load_raw:
             self.raw_dataset = self.initialize_raw()
@@ -57,7 +61,8 @@ class EasyVQADataset(TorchDataset):
 
         _, start, end = parse_split_slicer(self.split)
         if start is not None or end is not None:
-            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
+            raw_dataset = raw_dataset.select(
+                range(start or 0, end or len(raw_dataset)))
 
         return raw_dataset
 
@@ -172,7 +177,8 @@ class EasyVQADataset(TorchDataset):
                 if hasattr(self, key):
                     setattr(self, key, value)
                 else:
-                    logger.warning(f"Attribute {key} not found in class instance.")
+                    logger.warning(
+                        f"Attribute {key} not found in class instance.")
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {
