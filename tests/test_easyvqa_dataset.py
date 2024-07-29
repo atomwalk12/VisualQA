@@ -1,5 +1,7 @@
 import pytest
 
+from ..lib.representations import DatasetTypes
+
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
 
 
@@ -40,7 +42,7 @@ def test_get_10_val_items():
 
 
 def test_save_dataset(initialize_train_dataset):
-    dir = "./data/easyvqa"
+    dir = f"./data/{DatasetTypes.EASY_VQA.value}"
     initialize_train_dataset.save(dir)
 
     vqa_dataset = initialize_train_dataset.load(dir)
@@ -48,7 +50,7 @@ def test_save_dataset(initialize_train_dataset):
 
 
 def test_load_dataset():
-    dir = "./data/easyvqa"
+    dir = f"./data/{DatasetTypes.EASY_VQA.value}"
     train_ds = EasyVQADataset(split="train")
 
     vqa_dataset = train_ds.load(dir)
@@ -56,7 +58,7 @@ def test_load_dataset():
 
 
 def test_error_thrown_for_nonexistent_file_load():
-    dir = "./data/easyvqa"
+    dir = f"./data/{DatasetTypes.EASY_VQA.value}"
     train_ds = EasyVQADataset(split="train[:300]", load_raw=False)
 
     with pytest.raises(FileNotFoundError) as exc_info:

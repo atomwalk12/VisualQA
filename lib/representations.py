@@ -1,38 +1,32 @@
-from PIL import Image
-import matplotlib.pyplot as plt
-import numpy as np
+import logging
+from enum import Enum
+from typing import Tuple
+
+from .datasets_qa.easyvqa import EasyVQADataset
+from .types import CustomDataset
+
+logger = logging.getLogger(__name__)
 
 
-def show_images_with_captions(images_or_paths, captions, cols=3):
-    num_images = len(images_or_paths)
-    rows = int(np.ceil(num_images / cols))
+class DatasetTypes(str, Enum):
+    EASY_VQA = "easy-vqa"
 
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))
-    axes = axes.flatten()
 
-    for i, (image_or_path, caption) in enumerate(zip(images_or_paths, captions)):
-        # Check whether we have an image or a path and load adequately in both cases.
-        if isinstance(image_or_path, str):
-            image = Image.open(image_or_path)
-        else:
-            image = image_or_path
+class DatasetFactory:
+    @staticmethod
+    def create_dataset(
+        dataset_type: DatasetTypes, train_args: dict, test_args: dict
+    ) -> Tuple[CustomDataset, CustomDataset]:
 
-        ax = axes[i]
+        # Get corresponding datatbase class
+        dataset_rep_to_generator_type = {DatasetTypes.EASY_VQA: EasyVQADataset}
 
-        # Display the image
-        ax.imshow(image)
+        if dataset_type not in dataset_rep_to_generator_type:
+            raise ValueError(f"Invalid dataset type: {dataset_type}")
 
-        # Remove the axis ticks and labels
-        ax.set_xticks([])
-        ax.set_yticks([])
+        generator = dataset_rep_to_generator_type[dataset_type]
 
-        # Add the caption
-        ax.set_title(caption)
-
-    # Remove any unused subplots
-    for j in range(num_images, len(axes)):
-        fig.delaxes(axes[j])
-
-    # Adjust layout and show the plot
-    plt.tight_layout()
-    plt.show()
+        logger.info(f"Initializing dataset generator {generator.__name__}")
+        train_ds = generator(**train_args)
+        val_ds = generator(**test_args)
+        return train_ds, val_ds

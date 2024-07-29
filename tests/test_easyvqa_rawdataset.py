@@ -1,8 +1,6 @@
 import pytest
 from PIL.Image import Image
 
-from tests.utils import check_element
-
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
 
 

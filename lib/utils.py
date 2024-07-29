@@ -29,3 +29,13 @@ def get_complete_path(out, opt_name):
     if os.path.isdir(out):
         out = f"{out}/{opt_name}.pkl"
     return os.path.abspath(out)
+
+
+def existing_directory(arg: str):
+    """Return `Path(arg)` but raise a `ValueError` if it does not refer to an
+    existing directory."""
+    path = Path(arg)
+    if not path.is_dir():
+        raise ValueError(f"{arg=}) is not a directory")
+
+    return path

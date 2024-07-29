@@ -1,15 +1,17 @@
 import pytest
 
+from ..lib.representations import DatasetTypes
+
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
-from ..lib.representations import show_images_with_captions
+from ..lib.visualization import show_images_with_captions
 
 
 @pytest.fixture(scope="module")
 def train_ds():
     # Get cached dataset is available, otherwise generate a new one
-    dir = "./data/easyvqa"
+    dir = f"./data/{DatasetTypes.EASY_VQA.value}"
     train_ds = EasyVQADataset(split="train[16:25]", load_raw=False)
-    
+
     try:
         train_ds = train_ds.load(dir)
     except FileNotFoundError:
@@ -44,4 +46,5 @@ def test_show_test_samples(train_raw_ds):
         for question, answer in zip(elements["question"], elements["answer"])
     ]
 
-    show_images_with_captions(images_or_paths=elements["image"], captions=captions)
+    show_images_with_captions(
+        images_or_paths=elements["image"], captions=captions)

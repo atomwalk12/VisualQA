@@ -10,16 +10,17 @@ from easy_vqa import (
     get_answers
 )
 from PIL import Image
-from torch.utils.data import Dataset as TorchDataset
 
 from datasets import Dataset
+
+from ..types import CustomDataset
 
 from ..utils import get_complete_path, parse_split_slicer
 
 logger = logging.getLogger(__name__)
 
 
-class EasyVQADataset(TorchDataset):
+class EasyVQADataset(CustomDataset):
     raw_dataset: Dataset = None
     _dataset: Dataset = None
     ready_for_training: bool = False
@@ -39,8 +40,6 @@ class EasyVQADataset(TorchDataset):
 
     def initialize_raw(self):
         """Method to initialize the dataset."""
-
-        logger.info("Reading dataset")
 
         if self.split.startswith("train"):
             questions = get_train_questions()
@@ -64,6 +63,7 @@ class EasyVQADataset(TorchDataset):
             raw_dataset = raw_dataset.select(
                 range(start or 0, end or len(raw_dataset)))
 
+        logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
 
     @property

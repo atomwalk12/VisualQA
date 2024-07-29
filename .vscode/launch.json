@@ -5,6 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python Debugger: Debug easy-vqa data processing",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune_blip2.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2",
+                "--dataset",
+                "easy-vqa",
+                "--task",
+                "process_data",
+                "--output-dir",
+                "data/easy-vqa"
+            ]
+        },
+        {
             "name": "Python: Debug Tests",
             "type": "debugpy",
             "request": "launch",
