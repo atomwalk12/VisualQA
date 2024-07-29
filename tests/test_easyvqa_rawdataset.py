@@ -1,6 +1,8 @@
 import pytest
 from PIL.Image import Image
 
+from tests.utils import check_element
+
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
 
 
@@ -16,32 +18,24 @@ def train_raw_dataset():
     return wrapper
 
 
-def test_load_dataset(train_raw_dataset: EasyVQADataset):
-    """
-    Testing Dataset initialization
-    """
+def test_load_train_dataset(train_raw_dataset: EasyVQADataset):
     assert len(train_raw_dataset.raw_dataset) > 0
 
 
-def test_get_item(train_raw_dataset: EasyVQADataset):
-    """
-    Testing retrieval of dataset item
-    """
+def test_get_raw_item(train_raw_dataset: EasyVQADataset):
     assert isinstance(train_raw_dataset[0], dict)
 
 
-def test_check_item(train_raw_dataset: EasyVQADataset):
-    """
-    Testing retrieval of an image with associated information
-    """
+def test_check_training_item_properties(train_raw_dataset: EasyVQADataset):
     element: dict = train_raw_dataset[0]
-    check_element(element)
+    assert len(element["answer"]) > 0
+    assert len(element["question"]) > 0
+    assert len(element["image_path"]) > 0
+    assert element["image_id"] is not None
+    assert isinstance(element["image"], Image)
 
 
-def test_iterate(train_raw_dataset: EasyVQADataset):
-    """
-    Iterate over the dataset by retrieving a number of elements
-    """
+def test_check_individual_value_from_batch(train_raw_dataset: EasyVQADataset):
     elements = train_raw_dataset[:10]
 
     for question, answer, image_id, image_path, image in zip(
@@ -56,14 +50,6 @@ def test_iterate(train_raw_dataset: EasyVQADataset):
         assert len(image_path) > 0
         assert image_id is not None
         assert isinstance(image, Image)
-
-
-def check_element(element: dict):
-    assert len(element["answer"]) > 0
-    assert len(element["question"]) > 0
-    assert len(element["image_path"]) > 0
-    assert element["image_id"] is not None
-    assert isinstance(element["image"], Image)
 
 
 def test_load_val_dataset(

@@ -17,12 +17,12 @@ def initialize_val_dataset():
     return train_ds
 
 
-def test_get_train_item(initialize_train_dataset: EasyVQADataset):
+def test_check_training_item_properties(initialize_train_dataset: EasyVQADataset):
     element = initialize_train_dataset[0]
     check_properties(element)
 
 
-def test_get_val_item(initialize_val_dataset: EasyVQADataset):
+def test_check_validation_item_properties(initialize_val_dataset: EasyVQADataset):
     element = initialize_val_dataset[0]
     check_properties(element)
 

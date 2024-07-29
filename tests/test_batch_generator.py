@@ -1,6 +1,8 @@
 import pytest
 from transformers import AutoProcessor, Blip2Processor
 
+from tests.utils import get_index
+
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
 from ..lib.lightning_trainer import BLIP2PLModule
 from ..lib.types import ModuleConfig
@@ -100,9 +102,3 @@ def test_decode_batch_and_check_against_training_examples(
         # Check decoded text
         assert text == train_dataset[idx:end]["prompt"]
         idx += batch_size
-
-
-def get_index(possible_idx, batch_size, ds):
-    ds_size = len(ds)
-    idx = batch_size + possible_idx if possible_idx + batch_size < ds_size else ds_size
-    return idx
