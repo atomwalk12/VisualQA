@@ -70,3 +70,12 @@ def test_load_val_dataset(
     train_raw_dataset: EasyVQADataset, val_raw_dataset: EasyVQADataset
 ):
     assert len(train_raw_dataset) > len(val_raw_dataset)
+
+
+def test_check_slicing_operator():
+    dataset = EasyVQADataset(split="val[:10]")
+    assert len(dataset) == 10
+    dataset = EasyVQADataset(split="val[5:10]")
+    assert len(dataset) == 5
+    dataset = EasyVQADataset(split="val[1000:]")
+    assert len(dataset) > 1000

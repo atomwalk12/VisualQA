@@ -1,4 +1,5 @@
 import logging
+import pickle
 
 import pandas as pd
 from easy_vqa import (
@@ -54,9 +55,9 @@ class EasyVQADataset(TorchDataset):
 
         raw_dataset = Dataset.from_dict(dict)
 
-        _, count = parse_split_slicer(self.split)
-        if count is not None:
-            raw_dataset = raw_dataset.select(range(count))
+        _, start, end = parse_split_slicer(self.split)
+        if start is not None or end is not None:
+            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
 
         return raw_dataset
 
@@ -85,6 +86,9 @@ class EasyVQADataset(TorchDataset):
         if self.ready_for_training:
             return self.dataset[index]
         else:
+            assert (
+                self.raw_dataset is not None
+            ), "Please initialize the raw dataset (pass load_raw=True in the constructor)"
             return self.raw_dataset[index]
 
     def initialize_for_training(self):
@@ -92,10 +96,10 @@ class EasyVQADataset(TorchDataset):
 
         logger.info("Preparing data for training")
         columns_to_remove = self.raw_dataset.column_names
-        columns_to_remove.remove('image')
+        columns_to_remove.remove("image")
         self._dataset = self.raw_dataset.map(
             lambda item: self._prepared_for_training(item),
-            remove_columns=columns_to_remove
+            remove_columns=columns_to_remove,
         )
         self.ready_for_training = True
 
@@ -150,7 +154,9 @@ class EasyVQADataset(TorchDataset):
         logger.info("Saving dataset to %s", complete_path)
 
         try:
-            self.dataset.to_pandas().to_pickle(complete_path)
+            with open(complete_path, 'wb') as file:
+                pickle.dump(self, file)
+
         except TypeError:
             logger.error(f"Was not able to save pickle file at {out}")
             raise
@@ -160,7 +166,13 @@ class EasyVQADataset(TorchDataset):
         complete_path = get_complete_path(out, opt_name=self.split)
 
         try:
-            self._dataset = Dataset.from_pandas(pd.read_pickle(complete_path))
+            loaded_data = pd.read_pickle(complete_path)
+
+            for key, value in vars(loaded_data).items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+                else:
+                    logger.warning(f"Attribute {key} not found in class instance.")
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {

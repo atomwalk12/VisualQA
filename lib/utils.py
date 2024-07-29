@@ -4,12 +4,20 @@ from pathlib import Path
 
 def parse_split_slicer(split: str):
     if "[" in split:
-        split, count = split.split("[:")
-        count = int(count[:-1])
+        split, slicer = split.split("[")
+        slicer = slicer[:-1]  # Remove the trailing ']'
+        if ":" in slicer:
+            start, end = slicer.split(":")
+            start = int(start) if start else None
+            end = int(end) if end else None
+        else:
+            start = int(slicer)
+            end = None
     else:
-        count = None
+        start = None
+        end = None
 
-    return split, count
+    return split, start, end
 
 
 def is_dir(path):

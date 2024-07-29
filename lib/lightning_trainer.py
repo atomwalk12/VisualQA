@@ -1,9 +1,10 @@
+import logging
+
 import lightning as L
 from torch.utils.data import DataLoader
-from datasets import DatasetBuilder
-from .types import ModuleConfig
-import logging
 from transformers import AutoProcessor
+
+from .types import ModuleConfig
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ class BLIP2PLModule(L.LightningModule):
         return DataLoader(
             self.config.train_dataset,
             collate_fn=lambda batch: self.train_collate_fn(
-                batch, self.processor, self.config),
+                batch, self.processor, self.config
+            ),
             batch_size=self.config.batch_size,
             shuffle=True,
             num_workers=0,
@@ -46,11 +48,17 @@ class BLIP2PLModule(L.LightningModule):
         texts = []
         logger.info(processor)
         for item in batch:
-            logger.info(item.get('image'))
-            texts.append(item.get('prompt'))
-            images.append(item.get('image'))
+            logger.info(item.get("prompt"))
+            texts.append(item.get("prompt"))
+            images.append(item.get("image"))
 
-        inputs = processor(text=texts, images=images, padding=True,
-                           truncation=True, max_length=config.max_length, return_tensors="pt")
+        inputs = processor(
+            text=texts,
+            images=images,
+            padding=True,
+            truncation=True,
+            max_length=config.max_length,
+            return_tensors="pt",
+        )
 
         return inputs

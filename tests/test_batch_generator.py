@@ -8,8 +8,9 @@ from ..lib.types import ModuleConfig
 
 @pytest.fixture(scope="module")
 def train_dataset():
+    # Get cached dataset is available, otherwise generate a new one
     dir = "./data/easyvqa"
-    train_ds = EasyVQADataset(split="train[:301]", load_raw=False)
+    train_ds = EasyVQADataset(split="train[:30]", load_raw=False)
     try:
         train_ds = train_ds.load(dir)
     except FileNotFoundError:
