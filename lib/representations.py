@@ -2,7 +2,14 @@ import logging
 from enum import Enum
 from typing import Tuple
 
-from transformers import AutoModel, AutoProcessor, Blip2ForConditionalGeneration
+import torch
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import (
+    AutoModel,
+    AutoProcessor,
+    BitsAndBytesConfig,
+    Blip2ForConditionalGeneration,
+)
 
 from .datasets_qa.easyvqa import EasyVQADataset
 from .types import CustomDataset
@@ -19,7 +26,14 @@ class ModelTypes(str, Enum):
 
 
 class HFRepos(str, Enum):
-    BLIP2_OPT = "salesforce/blip2-opt-2.7b"
+    BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
+
+
+# Mapping from model types to repo IDs
+MODEL_REPO_MAPPING = {ModelTypes.BLIP2: HFRepos.BLIP2_OPT.value}
+
+# Mapping from model types to model classes
+MODEL_CLASS_MAPPING = {ModelTypes.BLIP2: Blip2ForConditionalGeneration}
 
 
 class DatasetFactory:
@@ -43,16 +57,60 @@ class DatasetFactory:
 
 class ModelFactory:
     @staticmethod
-    def get_models(model_name: str) -> Tuple[AutoModel, AutoProcessor]:
-        # Get corresponding datatbase class
-        names_to_repo_ids = {ModelTypes.BLIP2: HFRepos.BLIP2_OPT}
+    def create_bnb_config() -> BitsAndBytesConfig:
+        """Create a BitsAndBytesConfig for quantization."""
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+        )
 
-        if model_name not in names_to_repo_ids:
+    @staticmethod
+    def create_lora_config() -> LoraConfig:
+        """Create a LoraConfig for PEFT."""
+        return LoraConfig(
+            r=8,
+            lora_alpha=8,
+            lora_dropout=0.1,
+            target_modules="all-linear",
+            init_lora_weights="gaussian",
+        )
+
+    def get_models(
+        model_name: ModelTypes, apply_qlora: bool = True
+    ) -> Tuple[AutoModel, AutoProcessor]:
+        """
+        Get the model and processor for a given model type.
+
+        Args:
+            model_name (ModelTypes): The type of model to retrieve.
+            apply_qlora (bool): Whether to apply QLoRA quantization.
+
+        Returns:
+            Tuple[AutoModel, AutoProcessor]: The model and processor.
+
+        Raises:
+            ValueError: If the model type is invalid.
+        """
+        if model_name not in MODEL_REPO_MAPPING:
             raise ValueError(f"Invalid model type: {model_name}")
 
-        model_classes = {ModelTypes.BLIP2: Blip2ForConditionalGeneration}
+        repo_id = MODEL_REPO_MAPPING[model_name]
+        model_class = MODEL_CLASS_MAPPING[model_name]
 
-        repo_id = names_to_repo_ids[model_name].value
+        # Load both the processor and model
         processor = AutoProcessor.from_pretrained(repo_id)
-        model = model_classes[model_name].from_pretrained(repo_id)
+
+        if apply_qlora:
+            bnb_config = ModelFactory.create_bnb_config()
+            model = model_class.from_pretrained(
+                repo_id, torch_dtype=torch.float16, quantization_config=bnb_config
+            )
+
+            lora_config = ModelFactory.create_lora_config()
+            model = prepare_model_for_kbit_training(model)
+            model = get_peft_model(model, lora_config)
+        else:
+            model = model_class.from_pretrained(repo_id, torch_dtype=torch.float16)
+
         return model, processor

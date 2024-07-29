@@ -100,6 +100,9 @@ class BLIP2PLModule(L.LightningModule):
 
         return loss
 
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.config.lr)
+
 
 class LightningFineTune:
     def __init__(self, config: LightningConfig):
@@ -107,8 +110,8 @@ class LightningFineTune:
         self.config = config
 
     @staticmethod
-    def create_module(model_name, train_ds, val_ds):
-        model, processor = ModelFactory.get_models(model_name)
+    def create_module(model_name, train_ds, val_ds, apply_qlora=True):
+        model, processor = ModelFactory.get_models(model_name, apply_qlora=apply_qlora)
 
         config = ModuleConfig(
             train_dataset=train_ds,

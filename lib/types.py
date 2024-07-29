@@ -11,11 +11,12 @@ class ModuleConfig:
     val_dataset: Dataset
     processor: AutoProcessor
     model: AutoModel
-    batch_size: int = 7
+    batch_size: int = 12
     max_length: int = 25
     shuffle_train: bool = True
 
     lr = 5e-4
+    
 
     def __repr__(self):
         return (
