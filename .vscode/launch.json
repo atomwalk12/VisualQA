@@ -16,7 +16,24 @@
                 "--dataset",
                 "easy-vqa",
                 "--task",
-                "process_data",
+                "process-data",
+                "--output-dir",
+                "data/easy-vqa"
+            ]
+        },
+        {
+            "name": "Python Debugger: Debug easy-vqa finetune",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune_blip2.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2",
+                "--dataset",
+                "easy-vqa",
+                "--task",
+                "fine-tune",
                 "--output-dir",
                 "data/easy-vqa"
             ]

@@ -1,5 +1,7 @@
 import logging
+from lib.lightning_trainer import LightningFineTune
 from lib.representations import DatasetFactory
+from lib.types import LightningConfig
 from lib.utils import existing_directory
 import argparse
 
@@ -29,8 +31,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--task",
         choices=[
-            "process_data",
-            "finetune",
+            "process-data",
+            "fine-tune",
         ],
         type=str,
         help="Specific task - preprocessing or training",
@@ -39,7 +41,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=existing_directory,
         help="Path to directory where intermediate data will be pickled and stored.",
-        default="data/out/",
+        default="data/",
     )
     parser.add_argument(
         "-m",
@@ -60,15 +62,31 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main(args: argparse.Namespace):
-    if args.task == 'process_data':
-        train_args = {'split': 'train', 'classify': False, 'load_raw': True}
-        val_args = {'split': 'val', 'classify': False, 'load_raw': True}
-        train_ds, val_ds = DatasetFactory.create_dataset(args.dataset, train_args, val_args)
+    load_raw = True if args.task == "process-data" else False
+    train_args = {"split": "train", "classify": False, "load_raw": load_raw}
+    val_args = {"split": "val", "classify": False, "load_raw": load_raw}
+
+    train_ds, val_ds = DatasetFactory.create_dataset(args.dataset, train_args, val_args)
+
+    if args.task == "process-data":
+        train_ds.initialize_for_training()
+        val_ds.initialize_for_training()
         train_ds.save(args.output_dir)
         val_ds.save(args.output_dir)
 
-    if args.task == 'finetune':
-        pass
+    if args.task == "fine-tune":
+        pickle_dir = args.output_dir
+        train_ds = train_ds.load(pickle_dir)
+        val_ds = val_ds.load(pickle_dir)
+
+        module = LightningFineTune.create_module(
+            args.model, train_ds=train_ds, val_ds=val_ds
+        )
+
+        config = LightningConfig()
+
+        trainer = LightningFineTune(config)
+        trainer.finetune(module)
 
 
 if __name__ == "__main__":

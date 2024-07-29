@@ -7,7 +7,7 @@ from easy_vqa import (
     get_test_questions,
     get_train_image_paths,
     get_train_questions,
-    get_answers
+    get_answers,
 )
 from PIL import Image
 
@@ -60,8 +60,7 @@ class EasyVQADataset(CustomDataset):
 
         _, start, end = parse_split_slicer(self.split)
         if start is not None or end is not None:
-            raw_dataset = raw_dataset.select(
-                range(start or 0, end or len(raw_dataset)))
+            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
@@ -98,6 +97,8 @@ class EasyVQADataset(CustomDataset):
 
     def initialize_for_training(self):
         """Prepare the dataset for training"""
+        # if self.raw_dataset is None:
+        #    self.initialize_raw()
 
         logger.info("Preparing data for training")
         columns_to_remove = self.raw_dataset.column_names
@@ -151,15 +152,14 @@ class EasyVQADataset(CustomDataset):
         """
 
         if not self._prepared_for_training:
-            raise Exception(
-                f"First, call {self._prepared_for_training.__name__}.")
+            raise Exception(f"First, call {self._prepared_for_training.__name__}.")
 
         complete_path = get_complete_path(out, opt_name=self.split)
 
         logger.info("Saving dataset to %s", complete_path)
 
         try:
-            with open(complete_path, 'wb') as file:
+            with open(complete_path, "wb") as file:
                 pickle.dump(self, file)
 
         except TypeError:
@@ -177,8 +177,9 @@ class EasyVQADataset(CustomDataset):
                 if hasattr(self, key):
                     setattr(self, key, value)
                 else:
-                    logger.warning(
-                        f"Attribute {key} not found in class instance.")
+                    logger.warning(f"Attribute {key} not found in class instance.")
+
+            logger.info(f"Loaded {len(self._dataset)} items from {complete_path}")
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {

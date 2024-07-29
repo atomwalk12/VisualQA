@@ -5,7 +5,7 @@ from transformers import AutoProcessor
 
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
 from ..lib.lightning_trainer import BLIP2PLModule, LightningFineTune
-from ..lib.representations import DatasetFactory, DatasetTypes
+from ..lib.representations import DatasetFactory, DatasetTypes, ModelTypes
 from ..lib.types import ModuleConfig
 
 
@@ -41,7 +41,7 @@ def val_dataset():
 
 @pytest.fixture(scope="module")
 def processor():
-    MODEL_ID = "Salesforce/blip2-opt-2.7b"
+    MODEL_ID = ModelTypes.BLIP2_OPT
 
     processor = AutoProcessor.from_pretrained(MODEL_ID)
 

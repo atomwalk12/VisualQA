@@ -1,9 +1,11 @@
 import logging
 
 import lightning as L
+import torch
 from torch.utils.data import DataLoader
 from transformers import AutoProcessor
 
+from .representations import ModelFactory
 from .types import LightningConfig, ModuleConfig
 
 logger = logging.getLogger(__name__)
@@ -105,9 +107,19 @@ class LightningFineTune:
         self.config = config
 
     @staticmethod
-    def create_module(model, config: ModuleConfig):
-        module = BLIP2PLModule()
-        # TODO Unfinished
+    def create_module(model_name, train_ds, val_ds):
+        model, processor = ModelFactory.get_models(model_name)
+
+        config = ModuleConfig(
+            train_dataset=train_ds,
+            val_dataset=val_ds,
+            processor=processor,
+            model=model,
+            shuffle_train=True,
+        )
+
+        module = BLIP2PLModule(config)
+        return module
 
     def finetune(self, module: L.LightningModule):
         trainer = L.Trainer(
