@@ -70,7 +70,7 @@ def test_batch_generation(blip2_module):
 def test_load_training_dataset_and_check_output_values(blip2_module):
     for batch in blip2_module.train_dataloader():
         assert all(
-            [key in ["input_ids", "attention_mask", "pixel_values"]
+            [key in ["input_ids", "attention_mask", "pixel_values", "labels"]
                 for key in batch]
         )
 

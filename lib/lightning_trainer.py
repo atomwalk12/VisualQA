@@ -4,7 +4,7 @@ import lightning as L
 from torch.utils.data import DataLoader
 from transformers import AutoProcessor
 
-from .types import ModuleConfig
+from .types import LightningConfig, ModuleConfig
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,8 @@ class BLIP2PLModule(L.LightningModule):
         logger.info(config)
 
         self.config = config
-        self.processor = self.config.processor
+        self.processor = config.processor
+        self.model = config.model
 
     def train_dataloader(self):
         assert self.config.train_dataset is not None
@@ -58,8 +59,9 @@ class BLIP2PLModule(L.LightningModule):
             return_tensors="pt",
         )
 
-        return inputs
+        inputs["labels"] = inputs["input_ids"].clone()
 
+        return inputs
 
     @staticmethod
     def eval_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
@@ -80,7 +82,44 @@ class BLIP2PLModule(L.LightningModule):
             return_tensors="pt",
         )
 
+        # TODO(Razvan) ATTENTION! Here I am not tokenizing the labels!
         result = {}
         result["inputs"] = inputs
         result["labels"] = labels
         return result
+
+    def training_step(self, batch, batch_idx):
+        outputs = self.model(**batch)
+        loss = outputs.loss
+        error = loss.item()
+        logger.info(f"Epoch {self.current_epoch}, loss: {error}")
+
+        self.log("train_loss", error, batch_size=self.config.batch_size)
+
+        return loss
+
+
+class LightningFineTune:
+    def __init__(self, config: LightningConfig):
+        # Set up configuration parameters
+        self.config = config
+
+    @staticmethod
+    def create_module(model, config: ModuleConfig):
+        module = BLIP2PLModule()
+        # TODO Unfinished
+
+    def finetune(self, module: L.LightningModule):
+        trainer = L.Trainer(
+            accelerator="gpu",
+            devices=[0],
+            max_epochs=self.config.max_epochs,
+            accumulate_grad_batches=self.config.accumulate_grad_batches,
+            check_val_every_n_epoch=self.config.check_val_every_n_epochs,
+            gradient_clip_val=self.config.gradient_clip_val,
+            precision="16-mixed",
+            limit_val_batches=self.config.limit_val_batches,
+            num_sanity_val_steps=0,
+        )
+
+        trainer.fit(module)

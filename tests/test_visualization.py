@@ -31,7 +31,7 @@ def train_raw_ds(request):
 
 
 def test_show_train_samples(train_ds):
-    elements = train_ds[10:20]
+    elements = train_ds[:9]
 
     show_images_with_captions(
         images_or_paths=elements["image"], captions=elements["prompt"]
