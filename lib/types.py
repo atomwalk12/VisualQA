@@ -54,6 +54,7 @@ class LightningConfig:
     accumulate_grad_batches = 8
     gradient_clip_val = 1.0
     limit_val_batches = 1.0
+    limit_train_batches = 1.0
     max_epochs = 200
     check_val_every_n_epochs = 5
 

@@ -73,6 +73,20 @@ def get_parser() -> argparse.ArgumentParser:
         default="val",
     )
 
+    parser.add_argument(
+        "--limit-train-batches",
+        type=float,
+        help="Number of batches to train for.",
+        default=1.0,
+    )
+
+    parser.add_argument(
+        "--limit-val-batches",
+        type=float,
+        help="Number of batches to perform validation for.",
+        default=1.0,
+    )
+
     return parser
 
 
@@ -106,7 +120,10 @@ def main(args: argparse.Namespace):
         )
 
         # Lightning configuration file: contains batch_size, lr, etc.
-        config = LightningConfig()
+        config = LightningConfig(
+            limit_train_batches=args.limit_train_batches,
+            limit_val_batches=args.limit_val_batches,
+        )
 
         trainer = LightningFineTune(config)
         trainer.finetune(module)

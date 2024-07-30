@@ -180,6 +180,7 @@ class LightningFineTune:
             check_val_every_n_epoch=self.config.check_val_every_n_epochs,
             gradient_clip_val=self.config.gradient_clip_val,
             precision="16-mixed",
+            limit_train_batches=self.config.limit_train_batches,
             limit_val_batches=self.config.limit_val_batches,
             num_sanity_val_steps=0,
         )
