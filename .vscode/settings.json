@@ -12,4 +12,7 @@
     // ],
     "coverage-gutters.showGutterCoverage": false,
     "coverage-gutters.showLineCoverage": true,
+    "cSpell.words": [
+        "qlora"
+    ],
 }

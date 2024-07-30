@@ -137,7 +137,7 @@ class EasyVQADataset(CustomDataset):
         if self.split.startswith("train"):
             prompt = f"Question: {input_text} Answer: {label}."
         elif self.split.startswith("val"):
-            prompt = f"{input_text}. Answer:"
+            prompt = f"Question: {input_text} Answer:"
         else:
             raise Exception(f"Flag {self.split} not recognized.")
 

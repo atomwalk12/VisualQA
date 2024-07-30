@@ -11,8 +11,9 @@ from transformers import (
     Blip2ForConditionalGeneration,
 )
 
+
 from .datasets_qa.easyvqa import EasyVQADataset
-from .types import CustomDataset
+from .types import BertScoreMetric, CustomDataset
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +115,11 @@ class ModelFactory:
             model = model_class.from_pretrained(repo_id, torch_dtype=torch.float16)
 
         return model, processor
+
+
+def load_evaluation_metrics(model: str, dataset: str):
+    blip2 = ModelTypes.BLIP2.value
+    easyvqa = DatasetTypes.EASY_VQA.value
+    metrics = {(blip2, easyvqa): [BertScoreMetric()]}
+
+    return metrics[(model, dataset)]

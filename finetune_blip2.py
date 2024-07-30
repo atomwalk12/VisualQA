@@ -1,10 +1,10 @@
+import argparse
 import logging
-import os
+
 from lib.lightning_trainer import LightningFineTune
 from lib.representations import DatasetFactory
 from lib.types import LightningConfig
 from lib.utils import existing_directory
-import argparse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -77,27 +77,35 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main(args: argparse.Namespace):
-    load_raw = True if args.task == "process-data" else False
-    train_args = {"split": args.train, "classify": False, "load_raw": load_raw}
-    val_args = {"split": args.val, "classify": False, "load_raw": load_raw}
-
-    train_ds, val_ds = DatasetFactory.create_dataset(args.dataset, train_args, val_args)
-
     if args.task == "process-data":
+        # Training class parameters
+        train_args = {"split": args.train, "classify": False, "load_raw": True}
+        val_args = {"split": args.val, "classify": False, "load_raw": True}
+
+        # Load the two datasets and prepare for training
+        train_ds, val_ds = DatasetFactory.create_dataset(
+            args.dataset, train_args, val_args
+        )
         train_ds.initialize_for_training()
         val_ds.initialize_for_training()
+
+        # Finally, save them to disk
         train_ds.save(args.data_dir)
         val_ds.save(args.data_dir)
 
     if args.task == "fine-tune":
-        pickle_dir = args.data_dir
-        train_ds = train_ds.load(pickle_dir)
-        val_ds = val_ds.load(pickle_dir)
+        train_args = {"split": args.train, "classify": False, "load_raw": False}
+        val_args = {"split": args.val, "classify": False, "load_raw": False}
 
+        # Create the lighting module used for fine-tuning.
         module = LightningFineTune.create_module(
-            args.model, train_ds=train_ds, val_ds=val_ds
+            model_name=args.model,
+            ds_name=args.dataset,
+            train_args=train_args,
+            val_args=val_args,
         )
 
+        # Lightning configuration file: contains batch_size, lr, etc.
         config = LightningConfig()
 
         trainer = LightningFineTune(config)
@@ -107,5 +115,5 @@ def main(args: argparse.Namespace):
 if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
-    
+
     main(args)

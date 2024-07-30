@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from .constants import ROOT_DATA_DIR
+
 
 def parse_split_slicer(split: str):
     if "[" in split:
@@ -39,3 +41,7 @@ def existing_directory(arg: str):
         raise ValueError(f"{arg=}) is not a directory")
 
     return path
+
+
+def likely_pickle_dir(dataset_name):
+    return f"{ROOT_DATA_DIR}/{dataset_name}"
