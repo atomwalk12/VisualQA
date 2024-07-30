@@ -2,19 +2,17 @@ import logging
 import pickle
 
 import pandas as pd
+from datasets import Dataset
 from easy_vqa import (
+    get_answers,
     get_test_image_paths,
     get_test_questions,
     get_train_image_paths,
     get_train_questions,
-    get_answers,
 )
 from PIL import Image
 
-from datasets import Dataset
-
 from ..types import CustomDataset
-
 from ..utils import get_complete_path, parse_split_slicer
 
 logger = logging.getLogger(__name__)
@@ -37,6 +35,44 @@ class EasyVQADataset(CustomDataset):
 
         if load_raw:
             self.raw_dataset = self.initialize_raw()
+
+    def _initialize_raw(self):
+        """Method to initialize the dataset."""
+
+        if self.split.startswith("train") or self.split.startswith("val"):
+            questions = get_train_questions()
+            images = get_train_image_paths()
+        elif self.split.startswith("test"):
+            questions = get_test_questions()
+            images = get_test_image_paths()
+
+        dict = {
+            "question": questions[0],
+            "answer": questions[1],
+            "image_id": questions[2],
+            "image_path": [images[image_id] for image_id in questions[2]],
+            "image": [Image.open(images[image_id]) for image_id in questions[2]],
+        }
+
+        raw_dataset = Dataset.from_dict(dict)
+
+        # Now filter the dataset based on the number of items requested
+        split, start, end = parse_split_slicer(self.split)
+        if start is not None or end is not None:
+            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
+
+        if start is not None or end is not None:
+            if split in ["train", "val"]:
+                ds = raw_dataset.map(
+                    lambda example: {"stratify_column": example["answer"]}
+                )
+                ds = ds.class_encode_column("stratify_column").train_test_split(
+                    test_size=0.1, stratify_by_column="stratify_column", seed=1220
+                )
+                raw_dataset = ds[split if split == "train" else "test"]
+
+        logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
+        return raw_dataset
 
     def initialize_raw(self):
         """Method to initialize the dataset."""
@@ -179,7 +215,8 @@ class EasyVQADataset(CustomDataset):
                 else:
                     logger.warning(f"Attribute {key} not found in class instance.")
 
-            logger.info(f"Loaded {len(self._dataset)} items from {complete_path}")
+            logger.info(f"Loaded {len(self._dataset)
+                                  } items from {complete_path}")
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {

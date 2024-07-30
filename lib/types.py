@@ -8,7 +8,6 @@ import numpy as np
 from torch.utils.data import Dataset
 from transformers import AutoModel, AutoProcessor
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -53,10 +52,14 @@ class ModuleConfig:
 class LightningConfig:
     accumulate_grad_batches = 8
     gradient_clip_val = 1.0
-    limit_val_batches = 1.0
-    limit_train_batches = 1.0
     max_epochs = 200
     check_val_every_n_epochs = 5
+
+    def __init__(self, limit_train_batches=None, limit_val_batches=None):
+        self.limit_train_batches = (
+            limit_train_batches if limit_train_batches is None else 1.0
+        )
+        self.limit_val_batches = limit_val_batches if limit_val_batches is None else 1.0
 
 
 class CustomDataset(Dataset, ABC):
