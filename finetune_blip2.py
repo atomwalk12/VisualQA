@@ -1,4 +1,5 @@
 import logging
+import os
 from lib.lightning_trainer import LightningFineTune
 from lib.representations import DatasetFactory
 from lib.types import LightningConfig
@@ -38,7 +39,7 @@ def get_parser() -> argparse.ArgumentParser:
         help="Specific task - preprocessing or training",
     )
     parser.add_argument(
-        "--output-dir",
+        "--data-dir",
         type=existing_directory,
         help="Path to directory where intermediate data will be pickled and stored.",
         default="data/",
@@ -58,24 +59,38 @@ def get_parser() -> argparse.ArgumentParser:
         default=5,
     )
 
+    parser.add_argument(
+        "--train",
+        type=str,
+        help="Number of training examples to generate.",
+        default="train",
+    )
+
+    parser.add_argument(
+        "--val",
+        type=str,
+        help="Number of validation examples to generate.",
+        default="val",
+    )
+
     return parser
 
 
 def main(args: argparse.Namespace):
     load_raw = True if args.task == "process-data" else False
-    train_args = {"split": "train", "classify": False, "load_raw": load_raw}
-    val_args = {"split": "val", "classify": False, "load_raw": load_raw}
+    train_args = {"split": args.train, "classify": False, "load_raw": load_raw}
+    val_args = {"split": args.val, "classify": False, "load_raw": load_raw}
 
     train_ds, val_ds = DatasetFactory.create_dataset(args.dataset, train_args, val_args)
 
     if args.task == "process-data":
         train_ds.initialize_for_training()
         val_ds.initialize_for_training()
-        train_ds.save(args.output_dir)
-        val_ds.save(args.output_dir)
+        train_ds.save(args.data_dir)
+        val_ds.save(args.data_dir)
 
     if args.task == "fine-tune":
-        pickle_dir = args.output_dir
+        pickle_dir = args.data_dir
         train_ds = train_ds.load(pickle_dir)
         val_ds = val_ds.load(pickle_dir)
 
@@ -92,4 +107,5 @@ def main(args: argparse.Namespace):
 if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
+    
     main(args)

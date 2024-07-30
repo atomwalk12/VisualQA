@@ -17,7 +17,7 @@
                 "easy-vqa",
                 "--task",
                 "process-data",
-                "--output-dir",
+                "--data-dir",
                 "data/easy-vqa"
             ]
         },
@@ -34,8 +34,12 @@
                 "easy-vqa",
                 "--task",
                 "fine-tune",
-                "--output-dir",
-                "data/easy-vqa"
+                "--data-dir",
+                "data/easy-vqa",
+                "--val",
+                "val[:15]",
+                "--train",
+                "train[:30]"
             ]
         },
         {
