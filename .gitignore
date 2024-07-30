@@ -4,3 +4,4 @@ __pycache__
 ckpt
 data
 lightning_logs
+runs

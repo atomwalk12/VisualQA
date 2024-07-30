@@ -13,6 +13,10 @@
     "coverage-gutters.showGutterCoverage": false,
     "coverage-gutters.showLineCoverage": true,
     "cSpell.words": [
-        "qlora"
+        "qlora",
+        "tensorboard",
+        "vinputs",
+        "vlabels",
+        "voutputs"
     ],
 }

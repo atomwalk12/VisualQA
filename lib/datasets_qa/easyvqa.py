@@ -63,9 +63,7 @@ class EasyVQADataset(CustomDataset):
 
         if start is not None or end is not None:
             if split in ["train", "val"]:
-                ds = raw_dataset.map(
-                    lambda example: {"stratify_column": example["answer"]}
-                )
+                ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
                 ds = ds.class_encode_column("stratify_column").train_test_split(
                     test_size=0.1, stratify_by_column="stratify_column", seed=1220
                 )
@@ -73,6 +71,7 @@ class EasyVQADataset(CustomDataset):
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
+
 
     def initialize_raw(self):
         """Method to initialize the dataset."""

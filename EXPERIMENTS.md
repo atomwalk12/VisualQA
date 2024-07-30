@@ -6,11 +6,18 @@
 > python finetune_blip2.py --model blip2 --dataset easy-vqa --task process-data --data-dir data/easy-vqa --model-dir data/models
 ```
 
-## Run fine-tuning
+## Fine tune the model using lightning
+```python
+> mkdir -p data/easy-vqa data/models
+> python finetune_blip2.py --model blip2 --dataset easy-vqa --task fine-tune --data-dir data/easy-vqa --model-dir data/models --lightning
+```
+
+## Fine tune the model using manual loop
 ```python
 > mkdir -p data/easy-vqa data/models
 > python finetune_blip2.py --model blip2 --dataset easy-vqa --task fine-tune --data-dir data/easy-vqa --model-dir data/models
 ```
+
 
 # Instructions
 

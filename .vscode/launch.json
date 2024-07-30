@@ -22,7 +22,7 @@
             ]
         },
         {
-            "name": "Python Debugger: Debug easy-vqa finetune",
+            "name": "Python Debugger: Debug easy-vqa finetune using lightning",
             "type": "debugpy",
             "request": "launch",
             "program": "finetune_blip2.py",
@@ -40,6 +40,27 @@
                 "val[:15]",
                 "--train",
                 "train[:30]"
+            ]
+        },
+        {
+            "name": "Python Debugger: Debug easy-vqa finetune using manual loop",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune_blip2.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2",
+                "--dataset",
+                "easy-vqa",
+                "--task",
+                "fine-tune",
+                "--data-dir",
+                "data/easy-vqa",
+                "--val",
+                "train[:30]",
+                "--train",
+                "train[:30]",
             ]
         },
         {

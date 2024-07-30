@@ -1,6 +1,7 @@
 import argparse
 import logging
 
+from lib.classic_trainer import SimpleFinetuneLoop
 from lib.lightning_trainer import LightningFineTune
 from lib.representations import DatasetFactory
 from lib.types import LightningConfig
@@ -87,6 +88,8 @@ def get_parser() -> argparse.ArgumentParser:
         default=1.0,
     )
 
+    parser.add_argument("--lightning", action=argparse.BooleanOptionalAction)
+
     return parser
 
 
@@ -110,23 +113,34 @@ def main(args: argparse.Namespace):
     if args.task == "fine-tune":
         train_args = {"split": args.train, "classify": False, "load_raw": False}
         val_args = {"split": args.val, "classify": False, "load_raw": False}
+        if args.lightning:
+            logger.info("Fine tuning using torch lightning")
+            # Create the lighting module used for fine-tuning.
+            module = LightningFineTune.create_module(
+                model_name=args.model,
+                ds_name=args.dataset,
+                train_args=train_args,
+                val_args=val_args,
+            )
 
-        # Create the lighting module used for fine-tuning.
-        module = LightningFineTune.create_module(
-            model_name=args.model,
-            ds_name=args.dataset,
-            train_args=train_args,
-            val_args=val_args,
-        )
+            # Lightning configuration file: contains batch_size, lr, etc.
+            config = LightningConfig(
+                limit_train_batches=args.limit_train_batches,
+                limit_val_batches=args.limit_val_batches,
+            )
 
-        # Lightning configuration file: contains batch_size, lr, etc.
-        config = LightningConfig(
-            limit_train_batches=args.limit_train_batches,
-            limit_val_batches=args.limit_val_batches,
-        )
+            trainer = LightningFineTune(config)
+            trainer.finetune(module)
+        else:
+            logger.info("Fine tuning using manual loop")
+            module = SimpleFinetuneLoop.create_module(
+                model_name=args.model,
+                ds_name=args.dataset,
+                train_args=train_args,
+                val_args=val_args,
+            )
 
-        trainer = LightningFineTune(config)
-        trainer.finetune(module)
+            module.finetune()
 
 
 if __name__ == "__main__":
