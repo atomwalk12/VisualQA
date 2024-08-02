@@ -9,11 +9,16 @@ from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
     Blip2ForConditionalGeneration,
+    ViltForQuestionAnswering,
+    ViltProcessor,
+    Blip2Processor,
 )
+
+from lib.utils import likely_pickle_dir
 
 
 from .datasets_qa.easyvqa import EasyVQADataset
-from .types import BertScoreMetric, CustomDataset
+from .types import BertScoreMetric, CustomDataset, ModuleConfig
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +29,30 @@ class DatasetTypes(str, Enum):
 
 class ModelTypes(str, Enum):
     BLIP2 = "blip2"
+    VILT = "vilt"
 
 
 class HFRepos(str, Enum):
     BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
+    VILT = "dandelin/vilt-b32-mlm"
 
 
 # Mapping from model types to repo IDs
-MODEL_REPO_MAPPING = {ModelTypes.BLIP2: HFRepos.BLIP2_OPT.value}
+MODEL_REPO_MAPPING = {
+    ModelTypes.BLIP2: HFRepos.BLIP2_OPT.value,
+    ModelTypes.VILT: HFRepos.VILT.value,
+}
 
 # Mapping from model types to model classes
-MODEL_CLASS_MAPPING = {ModelTypes.BLIP2: Blip2ForConditionalGeneration}
+MODEL_CLASS_MAPPING = {
+    ModelTypes.BLIP2: Blip2ForConditionalGeneration,
+    ModelTypes.VILT: ViltForQuestionAnswering,
+}
+
+PROCESSOR_CLASS_MAPPING = {
+    ModelTypes.BLIP2: Blip2Processor,
+    ModelTypes.VILT: ViltProcessor,
+}
 
 
 class DatasetFactory:
@@ -51,8 +69,14 @@ class DatasetFactory:
         generator = dataset_rep_to_generator_type[dataset_type]
 
         logger.info(f"Initializing dataset generator {generator.__name__}")
-        train_ds = generator(**train_args)
-        val_ds = generator(**test_args)
+        
+        train_ds, val_ds = None, None
+        if train_args is not None:
+            train_ds = generator(**train_args)
+
+        if test_args is not None:
+            val_ds = generator(**test_args)
+
         return train_ds, val_ds
 
 
@@ -98,9 +122,10 @@ class ModelFactory:
 
         repo_id = MODEL_REPO_MAPPING[model_name]
         model_class = MODEL_CLASS_MAPPING[model_name]
+        processor_class = PROCESSOR_CLASS_MAPPING[model_name]
 
         # Load both the processor and model
-        processor = AutoProcessor.from_pretrained(repo_id)
+        processor = processor_class.from_pretrained(repo_id)
 
         if apply_qlora:
             bnb_config = ModelFactory.create_bnb_config()
@@ -109,17 +134,57 @@ class ModelFactory:
             )
 
             lora_config = ModelFactory.create_lora_config()
-            model = prepare_model_for_kbit_training(model)
+
+            model = prepare_model_for_kbit_training(
+                model, use_gradient_checkpointing=True
+            )
             model = get_peft_model(model, lora_config)
         else:
-            model = model_class.from_pretrained(repo_id, torch_dtype=torch.float16)
+            model = model_class.from_pretrained(repo_id)
 
         return model, processor
 
 
 def load_evaluation_metrics(model: str, dataset: str):
     blip2 = ModelTypes.BLIP2.value
+    vilt = ModelTypes.VILT.value
     easyvqa = DatasetTypes.EASY_VQA.value
-    metrics = {(blip2, easyvqa): [BertScoreMetric()]}
+    metrics = {
+        (blip2, easyvqa): [],
+        (vilt, easyvqa): [],
+    }
 
     return metrics[(model, dataset)]
+
+
+class ModuleConfigGenerator:
+    @staticmethod
+    def create_from(
+        model_name,
+        ds_name,
+        train_args,
+        val_args,
+        apply_qlora=True,
+        shuffle_train=True,
+    ):
+        # Load the model and processor
+        model, processor = ModelFactory.get_models(model_name, apply_qlora=apply_qlora)
+
+        # Load the training and validation sets
+        train_ds, val_ds = DatasetFactory.create_dataset(ds_name, train_args, val_args)
+        train_ds = train_ds.load()
+        val_ds = val_ds.load()
+
+        # Load the evaluation metrics
+        metrics = load_evaluation_metrics(model=model_name, dataset=ds_name)
+
+        # Adjust config parameters
+        return ModuleConfig(
+            train_dataset=train_ds,
+            model_name=model_name,
+            val_dataset=val_ds,
+            metrics=metrics,
+            processor=processor,
+            model=model,
+            shuffle_train=shuffle_train,
+        )

@@ -5,63 +5,71 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Debug easy-vqa data processing",
+            "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
-            "program": "finetune_blip2.py",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Data-processing",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "process.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
                 "blip2",
                 "--dataset",
                 "easy-vqa",
-                "--task",
-                "process-data",
-                "--data-dir",
-                "data/easy-vqa"
+                "--train",
+                "train[:100]",
+                "--val",
+                "val[:30]"
             ]
         },
         {
-            "name": "Python Debugger: Debug easy-vqa finetune using lightning",
+            "name": "Fine-tune, using pytorch, blip2 on easy-vqa dataset",
             "type": "debugpy",
             "request": "launch",
-            "program": "finetune_blip2.py",
+            "program": "finetune.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
                 "blip2",
                 "--dataset",
                 "easy-vqa",
-                "--task",
-                "fine-tune",
-                "--data-dir",
-                "data/easy-vqa",
-                "--val",
-                "val[:15]",
                 "--train",
-                "train[:30]"
+                "train[:350]",
+                "--val",
+                "val[:300]",
+                "--generate"
             ]
         },
         {
-            "name": "Python Debugger: Debug easy-vqa finetune using manual loop",
+            "name": "Fine tune BLIP 2 using lightning",
             "type": "debugpy",
             "request": "launch",
-            "program": "finetune_blip2.py",
+            "program": "finetune.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
                 "blip2",
                 "--dataset",
                 "easy-vqa",
-                "--task",
-                "fine-tune",
-                "--data-dir",
-                "data/easy-vqa",
-                "--val",
-                "train[:30]",
                 "--train",
-                "train[:30]",
+                "train[:100]",
+                "--val",
+                "val[:30]",
+                "--use-lightning"
             ]
+        },
+        {
+            "name": "Show a few sample images",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "inference.py",
+            "console": "integratedTerminal",
         },
         {
             "name": "Python: Debug Tests",

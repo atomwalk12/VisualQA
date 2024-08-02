@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
 
-from .constants import ROOT_DATA_DIR
+
+ROOT_DATA_DIR = "data/"
 
 
 def parse_split_slicer(split: str):
@@ -27,9 +28,10 @@ def is_dir(path):
     return p.is_dir()
 
 
-def get_complete_path(out, opt_name):
-    if os.path.isdir(out):
-        out = f"{out}/{opt_name}.pkl"
+def get_make_complete_path(file_name, dataset_name):
+    Path(f"{ROOT_DATA_DIR}/{dataset_name}").mkdir(parents=True, exist_ok=True)
+
+    out = f"{ROOT_DATA_DIR}/{dataset_name}/{file_name}.pkl"
     return os.path.abspath(out)
 
 
@@ -45,3 +47,13 @@ def existing_directory(arg: str):
 
 def likely_pickle_dir(dataset_name):
     return f"{ROOT_DATA_DIR}/{dataset_name}"
+
+
+def format_time(seconds):
+    """
+    Format time in seconds to hours, minutes, and seconds.
+    """
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = int((seconds % 3600) % 60)
+    return f"{hours:.0f}h {minutes:.0f}m {seconds:.0f}s"

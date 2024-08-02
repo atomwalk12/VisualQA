@@ -2,6 +2,8 @@ import logging
 import pickle
 
 import pandas as pd
+import torch
+import torch.nn.functional as F
 from datasets import Dataset
 from easy_vqa import (
     get_answers,
@@ -13,7 +15,7 @@ from easy_vqa import (
 from PIL import Image
 
 from ..types import CustomDataset
-from ..utils import get_complete_path, parse_split_slicer
+from ..utils import ROOT_DATA_DIR, get_make_complete_path, parse_split_slicer
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,9 @@ class EasyVQADataset(CustomDataset):
     _dataset: Dataset = None
     ready_for_training: bool = False
 
-    def __init__(self, split: str, classify=False, load_raw=True):
+    def __init__(
+        self, split: str, classify=False, load_raw=True, prepare_for_training=True
+    ):
         super().__init__()
         self.classify: bool = classify
 
@@ -35,6 +39,16 @@ class EasyVQADataset(CustomDataset):
 
         if load_raw:
             self.raw_dataset = self.initialize_raw()
+
+        # Create mappings
+        self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
+        self.id_to_answer = {idx: answer for idx, answer in enumerate(self.answer_space)}
+
+        if prepare_for_training:
+            self.initialize_for_training()
+
+    def shuffle(self, seed):
+        self._dataset = self._dataset.shuffle(seed)
 
     def _initialize_raw(self):
         """Method to initialize the dataset."""
@@ -63,7 +77,9 @@ class EasyVQADataset(CustomDataset):
 
         if start is not None or end is not None:
             if split in ["train", "val"]:
-                ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
+                ds = raw_dataset.map(
+                    lambda example: {"stratify_column": example["answer"]}
+                )
                 ds = ds.class_encode_column("stratify_column").train_test_split(
                     test_size=0.1, stratify_by_column="stratify_column", seed=1220
                 )
@@ -71,7 +87,6 @@ class EasyVQADataset(CustomDataset):
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
-
 
     def initialize_raw(self):
         """Method to initialize the dataset."""
@@ -155,7 +170,13 @@ class EasyVQADataset(CustomDataset):
             return self._autoregression(item)
 
     def _classify(self, item):
-        raise NotImplementedError()
+        prompt = item["question"]
+        label = item["answer"]
+
+        digit = self.answers_to_id[label]
+        label = F.one_hot(torch.tensor(digit), len(self.answer_space))
+
+        return {"prompt": prompt, "label": label}
 
     def _autoregression(self, item: dict):
         """Generate training example based on textual labels.
@@ -178,7 +199,7 @@ class EasyVQADataset(CustomDataset):
 
         return {"prompt": prompt, "label": label}
 
-    def save(self, out: str):
+    def save(self):
         """Utility used for saving the dataset at the given output path.
 
         Args:
@@ -189,7 +210,9 @@ class EasyVQADataset(CustomDataset):
         if not self._prepared_for_training:
             raise Exception(f"First, call {self._prepared_for_training.__name__}.")
 
-        complete_path = get_complete_path(out, opt_name=self.split)
+        complete_path = get_make_complete_path(
+            dataset_name="easy-vqa", file_name=self.split
+        )
 
         logger.info("Saving dataset to %s", complete_path)
 
@@ -198,12 +221,15 @@ class EasyVQADataset(CustomDataset):
                 pickle.dump(self, file)
 
         except TypeError:
-            logger.error(f"Was not able to save pickle file at {out}")
+            logger.error(f"Was not able to save pickle file at {complete_path}")
             raise
 
-    def load(self, out: str):
+    def load(self):
         """Utility to load the pickle from a given path."""
-        complete_path = get_complete_path(out, opt_name=self.split)
+        assert not self.ready_for_training
+        complete_path = get_make_complete_path(
+            file_name=self.split, dataset_name="easy-vqa"
+        )
 
         try:
             loaded_data = pd.read_pickle(complete_path)

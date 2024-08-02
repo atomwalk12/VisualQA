@@ -5,6 +5,7 @@ from typing import List
 
 import evaluate
 import numpy as np
+from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
 from transformers import AutoModel, AutoProcessor
 
@@ -21,30 +22,66 @@ class Metric:
 
 
 @dataclass
+class TorchTrainerConfig:
+    num_epochs: int = 5
+    optimizer_name: str = "AdamW"
+    scheduler_name: str = "CosineAnnealingLR"
+    n_accumulate: int = 1
+    train_batch_size: int = 64
+    val_batch_size: int = 64
+    optimizer: AdamW = None
+    scheduler: lr_scheduler = None
+
+    def set_optimizer_and_scheduler(self, model):
+        self.optimizer = self.fetch_optimizer(model)
+        self.scheduler = self.fetch_scheduler(self.optimizer)
+
+    def fetch_optimizer(self, model, lr=1e-4, weight_decay=1e-6):
+        assert self.optimizer_name == "AdamW", "Optimizer not implemented"
+
+        if self.optimizer_name == "AdamW":
+            return AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    def fetch_scheduler(self, optimizer, t_max=500, min_lr=1e-6, T_0=15):
+        if self.scheduler_name == "CosineAnnealingLR":
+            scheduler = lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=t_max, eta_min=min_lr
+            )
+        elif self.scheduler_name == "CosineAnnealingWarmRestarts":
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+                optimizer, T_0=T_0, eta_min=min_lr
+            )
+        elif self.scheduler_name is None:
+            return None
+
+        return scheduler
+
+
+@dataclass
 class ModuleConfig:
+    torch_hyperparameters: TorchTrainerConfig
+
     train_dataset: Dataset
     val_dataset: Dataset
     metrics: List[Metric]
-    processor: AutoProcessor = None
-    model: AutoModel = None
-    batch_size: int = 12
+    processor: AutoProcessor
+    model: AutoModel
+    model_name: str
     max_length: int = 25
+    wandb_project: str = "ComputerVision"
     shuffle_train: bool = True
-
-    lr = 5e-4
 
     def __repr__(self):
         metrics = " ".join(x.name for x in self.metrics)
 
         return (
             f"ModuleConfig(\n"
+            f"  model_name={self.model_name},\n"
             f"  train_dataset_length={len(self.train_dataset)},\n"
             f"  val_dataset_length={len(self.val_dataset)},\n"
-            f"  batch_size={self.batch_size},\n"
             f"  max_length={self.max_length},\n"
             f"  shuffle_train={self.shuffle_train}\n"
-            f"  lr={self.lr}\n"
-            f"  metrics={metrics}\n"
+            f"  metrics={metrics})\n"
         )
 
 
@@ -63,6 +100,8 @@ class LightningConfig:
 
 
 class CustomDataset(Dataset, ABC):
+    ready_for_training: bool
+    
     def __init__(self) -> None:
         super().__init__()
 
@@ -78,6 +117,10 @@ class CustomDataset(Dataset, ABC):
     def load():
         pass
 
+    @abstractmethod
+    def shuffle(seed):
+        pass
+
 
 class BertScoreMetric(Metric):
     def __init__(self) -> None:
@@ -85,12 +128,13 @@ class BertScoreMetric(Metric):
         self.name = "bertscore"
         self.log_columns = ["recall", "precision", "f1"]
 
-    def compute(self, pred, references):
+    def compute(self, pred, references, log=True):
         # Calculate the scores
         scores = self.metric.compute(predictions=pred, references=references, lang="en")
 
         # Log the results
-        logger.info(f"val_bertscore_recall: {np.mean(scores["recall"])}")
-        logger.info(f"val_bertscore_precision: {np.mean(scores["precision"])}")
-        logger.info(f"val_bertscore_f1: {np.mean(scores["f1"])}")
+        if log:
+            logger.info(f"val_bertscore_recall: {np.mean(scores["recall"])}")
+            logger.info(f"val_bertscore_precision: {np.mean(scores["precision"])}")
+            logger.info(f"val_bertscore_f1: {np.mean(scores["f1"])}")
         return scores

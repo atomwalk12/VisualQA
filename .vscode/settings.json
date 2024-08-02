@@ -13,10 +13,13 @@
     "coverage-gutters.showGutterCoverage": false,
     "coverage-gutters.showLineCoverage": true,
     "cSpell.words": [
+        "PYTHONHASHSEED",
         "qlora",
         "tensorboard",
+        "vilt",
         "vinputs",
         "vlabels",
         "voutputs"
     ],
+    "debugpy.debugJustMyCode": false
 }

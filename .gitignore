@@ -5,3 +5,8 @@ ckpt
 data
 lightning_logs
 runs
+wandb
+docs_
+BestLoss.bin
+blip2.best_loss.bin
+script.py

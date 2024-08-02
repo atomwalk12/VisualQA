@@ -6,11 +6,58 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import AutoProcessor
 
-from .representations import DatasetFactory, ModelFactory, load_evaluation_metrics
+from .representations import ModuleConfigGenerator
 from .types import LightningConfig, ModuleConfig
-from .utils import likely_pickle_dir
 
 logger = logging.getLogger(__name__)
+
+
+class ViltPLModule(L.LightningModule):
+    @staticmethod
+    def train_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
+        images = []
+        texts = []
+        labels = []
+        for item in batch:
+            texts.append(item.get("prompt"))
+            images.append(item.get("image"))
+            labels.append(torch.tensor(item.get("label")))
+
+        inputs = processor(
+            text=texts,
+            images=images,
+            padding=True,
+            truncation=True,
+            max_length=config.max_length,
+            return_tensors="pt",
+        )
+
+        inputs["labels"] = torch.stack(labels)
+
+        return inputs, labels
+
+    @staticmethod
+    def eval_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
+        images = []
+        texts = []
+        labels = []
+        for item in batch:
+            texts.append(item.get("prompt"))
+            images.append(item.get("image"))
+            labels.append(torch.tensor(item.get("label")))
+
+        inputs = processor(
+            text=texts,
+            images=images,
+            padding=True,
+            truncation=True,
+            max_length=config.max_length,
+            return_tensors="pt",
+        )
+
+        inputs["labels"] = torch.stack(labels)
+
+        return inputs
 
 
 class BLIP2PLModule(L.LightningModule):
@@ -51,52 +98,46 @@ class BLIP2PLModule(L.LightningModule):
         )
 
     @staticmethod
-    def train_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
+    def train_collate_fn(batch: dict, config: ModuleConfig):
         images = []
         texts = []
         for item in batch:
             texts.append(item.get("prompt"))
             images.append(item.get("image"))
 
-        inputs = processor(
-            text=texts,
+        inputs = config.processor(
             images=images,
-            padding=True,
-            truncation=True,
+            text=texts,
+            padding="max_length",
             max_length=config.max_length,
             return_tensors="pt",
         )
-
-        inputs["labels"] = inputs["input_ids"].clone()
 
         return inputs
 
     @staticmethod
-    def eval_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
+    def eval_collate_fn(batch: dict, config: ModuleConfig):
         images = []
         texts = []
-        labels = []
         for item in batch:
             texts.append(item.get("prompt"))
             images.append(item.get("image"))
-            labels.append(item.get("label"))
 
-        inputs = processor(
-            text=texts,
+        inputs = config.processor(
             images=images,
-            padding=True,
-            truncation=True,
+            text=texts,
+            padding="max_length",
             max_length=config.max_length,
             return_tensors="pt",
         )
 
-        # TODO(Razvan) ATTENTION! Here I am not tokenizing the labels!
-        return inputs, labels
+        return inputs
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.config.lr)
 
     def training_step(self, batch, batch_idx):
+        self.model.train()
         outputs = self.model(**batch)
         loss = outputs.loss
         error = loss.item()
@@ -107,13 +148,12 @@ class BLIP2PLModule(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx, dataset_idx=0):
+        self.model.eval()
         inputs, labels = batch
 
         # Generate predictions
         generated_ids = self.model.generate(**inputs)
-        predictions = self.processor.batch_decode(
-            generated_ids, skip_special_tokens=True
-        )
+        predictions = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         # Log batch information
         self._log_batch_info(batch_idx, predictions, labels)
@@ -122,7 +162,9 @@ class BLIP2PLModule(L.LightningModule):
         for metric in self.metrics:
             scores = metric.compute(pred=predictions, references=labels)
             for k in metric.log_columns:
-                self.log(f"{metric.name}_{k}", np.mean(scores[k]), batch_size=self.batch_size)
+                self.log(
+                    f"{metric.name}_{k}", np.mean(scores[k]), batch_size=self.batch_size
+                )
 
         return scores
 
@@ -150,24 +192,17 @@ class LightningFineTune:
         val_args: dict,
         pickle_dir: str = None,
         apply_qlora=True,
+        **args,
     ):
-        model, processor = ModelFactory.get_models(model_name, apply_qlora=apply_qlora)
-
-        train_ds, val_ds = DatasetFactory.create_dataset(ds_name, train_args, val_args)
-        pickle_dir = pickle_dir or likely_pickle_dir(ds_name)
-
-        train_ds = train_ds.load(pickle_dir)
-        val_ds = val_ds.load(pickle_dir)
-
-        config = ModuleConfig(
-            train_dataset=train_ds,
-            val_dataset=val_ds,
-            processor=processor,
-            model=model,
-            shuffle_train=True,
-            metrics=load_evaluation_metrics(model=model_name, dataset=ds_name),
+        config = ModuleConfigGenerator.create_from(
+            model_name=model_name,
+            ds_name=ds_name,
+            train_args=train_args,
+            val_args=val_args,
+            apply_qlora=apply_qlora,
+            pickle_dir=pickle_dir,
+            **args,
         )
-
         module = BLIP2PLModule(config)
         return module
 
