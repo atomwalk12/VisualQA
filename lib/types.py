@@ -29,6 +29,7 @@ class TorchTrainerConfig:
     n_accumulate: int = 1
     train_batch_size: int = 64
     val_batch_size: int = 64
+    test_batch_size: int = 64
     optimizer: AdamW = None
     scheduler: lr_scheduler = None
 
@@ -59,21 +60,15 @@ class TorchTrainerConfig:
 
 @dataclass
 class ModuleConfig:
-    torch_hyperparameters: TorchTrainerConfig
-
-    train_dataset: Dataset
-    val_dataset: Dataset
-    metrics: List[Metric]
     processor: AutoProcessor
     model: AutoModel
     model_name: str
     max_length: int = 25
     wandb_project: str = "ComputerVision"
     shuffle_train: bool = True
+    is_training: bool = True
 
     def __repr__(self):
-        metrics = " ".join(x.name for x in self.metrics)
-
         return (
             f"ModuleConfig(\n"
             f"  model_name={self.model_name},\n"
@@ -81,7 +76,6 @@ class ModuleConfig:
             f"  val_dataset_length={len(self.val_dataset)},\n"
             f"  max_length={self.max_length},\n"
             f"  shuffle_train={self.shuffle_train}\n"
-            f"  metrics={metrics})\n"
         )
 
 

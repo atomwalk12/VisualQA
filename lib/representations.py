@@ -14,7 +14,7 @@ from transformers import (
     Blip2Processor,
 )
 
-from lib.utils import likely_pickle_dir
+from .utils import likely_pickle_dir
 
 
 from .datasets_qa.easyvqa import EasyVQADataset
@@ -57,9 +57,7 @@ PROCESSOR_CLASS_MAPPING = {
 
 class DatasetFactory:
     @staticmethod
-    def create_dataset(
-        dataset_type: DatasetTypes, train_args: dict, test_args: dict
-    ) -> Tuple[CustomDataset, CustomDataset]:
+    def create_dataset(dataset_type: DatasetTypes, args: dict) -> CustomDataset:
         # Get corresponding datatbase class
         dataset_rep_to_generator_type = {DatasetTypes.EASY_VQA: EasyVQADataset}
 
@@ -69,15 +67,13 @@ class DatasetFactory:
         generator = dataset_rep_to_generator_type[dataset_type]
 
         logger.info(f"Initializing dataset generator {generator.__name__}")
+
+        dataset = generator(**args)
         
-        train_ds, val_ds = None, None
-        if train_args is not None:
-            train_ds = generator(**train_args)
+        if not dataset.ready_for_training:
+            dataset.load()
 
-        if test_args is not None:
-            val_ds = generator(**test_args)
-
-        return train_ds, val_ds
+        return dataset
 
 
 class ModelFactory:
@@ -145,17 +141,6 @@ class ModelFactory:
         return model, processor
 
 
-def load_evaluation_metrics(model: str, dataset: str):
-    blip2 = ModelTypes.BLIP2.value
-    vilt = ModelTypes.VILT.value
-    easyvqa = DatasetTypes.EASY_VQA.value
-    metrics = {
-        (blip2, easyvqa): [],
-        (vilt, easyvqa): [],
-    }
-
-    return metrics[(model, dataset)]
-
 
 class ModuleConfigGenerator:
     @staticmethod
@@ -175,15 +160,12 @@ class ModuleConfigGenerator:
         train_ds = train_ds.load()
         val_ds = val_ds.load()
 
-        # Load the evaluation metrics
-        metrics = load_evaluation_metrics(model=model_name, dataset=ds_name)
 
         # Adjust config parameters
         return ModuleConfig(
             train_dataset=train_ds,
             model_name=model_name,
             val_dataset=val_ds,
-            metrics=metrics,
             processor=processor,
             model=model,
             shuffle_train=shuffle_train,

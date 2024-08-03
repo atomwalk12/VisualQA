@@ -1,6 +1,8 @@
 import pytest
 from transformers import AutoProcessor, Blip2Processor
 
+from ..lib.types import TorchTrainerConfig
+
 from .utils import get_index
 
 from ..lib.datasets_qa.easyvqa import EasyVQADataset
@@ -18,13 +20,12 @@ from ..lib.representations import (
 def train_dataset():
     # Get cached dataset is available, otherwise generate a new one
     dir = f"./data/{DatasetTypes.EASY_VQA.value}"
-    train_ds = EasyVQADataset(split="train[:30]", load_raw=False)
+    train_ds = EasyVQADataset(split="train[:30]", load=False)
     try:
-        train_ds = train_ds.load(dir)
+        train_ds = train_ds.load()
     except FileNotFoundError:
-        train_ds = EasyVQADataset(split="train[:30]", load_raw=True)
-        train_ds.initialize_for_training()
-        train_ds.save(dir)
+        train_ds = EasyVQADataset(split="train[:30]", load=True)
+        train_ds.save()
 
     return train_ds
 
@@ -33,13 +34,13 @@ def train_dataset():
 def val_dataset():
     # Get cached dataset is available, otherwise generate a new one
     dir = f"./data/{DatasetTypes.EASY_VQA.value}"
-    val_ds = EasyVQADataset(split="val[:30]", load_raw=False)
+    val_ds = EasyVQADataset(split="val[:30]", load=False)
     try:
-        val_ds = val_ds.load(dir)
+        val_ds = val_ds.load()
     except FileNotFoundError:
-        val_ds = EasyVQADataset(split="val[:30]", load_raw=True)
+        val_ds = EasyVQADataset(split="val[:30]", load=True)
         val_ds.initialize_for_training()
-        val_ds.save(dir)
+        val_ds.save()
 
     return val_ds
 
@@ -63,6 +64,8 @@ def blip2_module(train_dataset, val_dataset, processor):
         processor=processor,
         model=None,
         shuffle_train=False,
+        torch_hyperparameters=TorchTrainerConfig(),
+        model_name="blip2",
         metrics=[load_evaluation_metrics(model, ds)],
     )
 
@@ -89,12 +92,10 @@ def test_load_validation_dataset_and_check_output_values(
     blip2_module: BLIP2PLModule, val_dataset: EasyVQADataset
 ):
     for batch in blip2_module.val_dataloader():
-        inputs = batch["inputs"]
-        labels = batch["labels"]
         assert all(
-            [key in ["input_ids", "attention_mask", "pixel_values"] for key in inputs]
+            [key in ["input_ids", "attention_mask", "pixel_values"] for key in batch]
         )
-        assert all([key in val_dataset.answer_space for key in labels])
+        assert all([key in val_dataset.answer_space for key in batch['labels]']])
 
 
 def test_decode_batch_and_check_against_training_examples(

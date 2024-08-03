@@ -25,10 +25,12 @@ class EasyVQADataset(CustomDataset):
     _dataset: Dataset = None
     ready_for_training: bool = False
 
-    def __init__(
-        self, split: str, classify=False, load_raw=True, prepare_for_training=True
-    ):
+    def __init__(self, split: str, classify=False, load=True):
         super().__init__()
+        logger.info(f"{split=}")
+        logger.info(f"{classify=}")
+        logger.info(f"{load=}")
+
         self.classify: bool = classify
 
         # can be train or val
@@ -37,20 +39,20 @@ class EasyVQADataset(CustomDataset):
         # Store the answer space for commodity
         self.answer_space = get_answers()
 
-        if load_raw:
+        if load:
             self.raw_dataset = self.initialize_raw()
 
         # Create mappings
         self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
         self.id_to_answer = {idx: answer for idx, answer in enumerate(self.answer_space)}
 
-        if prepare_for_training:
+        if load:
             self.initialize_for_training()
 
     def shuffle(self, seed):
         self._dataset = self._dataset.shuffle(seed)
 
-    def _initialize_raw(self):
+    def initialize_raw_for_classification(self):
         """Method to initialize the dataset."""
 
         if self.split.startswith("train") or self.split.startswith("val"):
@@ -91,10 +93,10 @@ class EasyVQADataset(CustomDataset):
     def initialize_raw(self):
         """Method to initialize the dataset."""
 
-        if self.split.startswith("train"):
+        if self.split.startswith("train") or self.split.startswith("val"):
             questions = get_train_questions()
             images = get_train_image_paths()
-        elif self.split.startswith("val"):
+        elif self.split.startswith("test"):
             questions = get_test_questions()
             images = get_test_image_paths()
 
@@ -108,7 +110,11 @@ class EasyVQADataset(CustomDataset):
 
         raw_dataset = Dataset.from_dict(dict)
 
-        _, start, end = parse_split_slicer(self.split)
+        split, start, end = parse_split_slicer(self.split)
+        if self.split.startswith("train") or self.split.startswith("val"):
+            target = "test" if split.startswith("val") else split
+            raw_dataset = raw_dataset.train_test_split(test_size=0.25)[target]
+
         if start is not None or end is not None:
             raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
 
@@ -147,9 +153,6 @@ class EasyVQADataset(CustomDataset):
 
     def initialize_for_training(self):
         """Prepare the dataset for training"""
-        # if self.raw_dataset is None:
-        #    self.initialize_raw()
-
         logger.info("Preparing data for training")
         columns_to_remove = self.raw_dataset.column_names
         columns_to_remove.remove("image")
@@ -192,7 +195,7 @@ class EasyVQADataset(CustomDataset):
 
         if self.split.startswith("train"):
             prompt = f"Question: {input_text} Answer: {label}."
-        elif self.split.startswith("val"):
+        elif self.split.startswith("val") or self.split.startswith("test"):
             prompt = f"Question: {input_text} Answer:"
         else:
             raise Exception(f"Flag {self.split} not recognized.")
@@ -219,7 +222,7 @@ class EasyVQADataset(CustomDataset):
         try:
             with open(complete_path, "wb") as file:
                 pickle.dump(self, file)
-
+                logger.info(f"Saved dataset configuration to {complete_path}")
         except TypeError:
             logger.error(f"Was not able to save pickle file at {complete_path}")
             raise
@@ -246,7 +249,9 @@ class EasyVQADataset(CustomDataset):
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {
                          complete_path}")
-            raise
+            self.raw_dataset = self.initialize_raw()
+            self.initialize_for_training()
+            self.save()
 
     def equals(self, other: Dataset):
         dataset = self.dataset.to_pandas()

@@ -1,8 +1,15 @@
+import logging
 import os
 from pathlib import Path
 
+import numpy as np
+import torch
 
 ROOT_DATA_DIR = "data/"
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def parse_split_slicer(split: str):
@@ -57,3 +64,18 @@ def format_time(seconds):
     minutes = int((seconds % 3600) // 60)
     seconds = int((seconds % 3600) % 60)
     return f"{hours:.0f}h {minutes:.0f}m {seconds:.0f}s"
+
+
+def set_seed(seed):
+    """Sets a seed for the run in order to make the results reproducible."""
+    logger.info(f"Setting {seed=}")
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    np.random.seed(seed)
+
+    # whether to use the torch autotuner and find the best algorithm for current hardware
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+    torch.cuda.manual_seed(seed)
+    torch.manual_seed(seed)

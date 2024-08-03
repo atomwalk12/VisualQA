@@ -10,31 +10,24 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 from colorama import Fore, Style
-from peft.utils.save_and_load import (
-    get_peft_model_state_dict,
-    set_peft_model_state_dict,
-)
+from peft.utils.save_and_load import get_peft_model_state_dict, set_peft_model_state_dict
+from sentence_transformers import SentenceTransformer, util
 from torch.utils.data import DataLoader
+import datetime
 
 # PyTorch TensorBoard support
 from tqdm import tqdm
-
 import wandb
-from lib.datasets_qa.easyvqa import EasyVQADataset
-from lib.lightning_trainer import BLIP2PLModule
-from lib.types import ModuleConfig, TorchTrainerConfig
-from lib.utils import format_time
 
-from .representations import (
-    DatasetFactory,
-    ModelFactory,
-    load_evaluation_metrics,
-)
+from .lightning_trainer import BLIP2PLModule
+from .representations import DatasetFactory, ModelFactory
+from .types import CustomDataset, ModuleConfig, TorchTrainerConfig
+from .utils import format_time
 
 logger = logging.getLogger(__name__)
 
 
-class TorchFineTuner:
+class TorchBase:
     def __init__(self, config: ModuleConfig):
         # This forces CUDA operations to be executed sequentially, which can
         # help with debugging by providing more precise error messages
@@ -68,37 +61,17 @@ class TorchFineTuner:
         wandb.watch(self.model, log_freq=100)
 
         # The path to store the best model
-        self.best_path = f"{config.model_name}.best_loss.bin"
+        date_time = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
+        self.best_path = f"{date_time}.{config.model_name}.best_loss.bin"
 
-        # Set up the run hyperparameters
-        self.hyperparameters: TorchTrainerConfig = config.torch_hyperparameters
-        self.hyperparameters.set_optimizer_and_scheduler(self.model)
-        self.optimizer = self.hyperparameters.optimizer
-        self.scheduler = self.hyperparameters.scheduler
+        # Load Sentence-BERT model
+        self.sbert = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
-        assert self.optimizer is not None
-
-        # Setup train and evaluation data loaders
-        self.train_dataloader = DataLoader(
-            config.train_dataset,
-            collate_fn=lambda batch: BLIP2PLModule.train_collate_fn(
-                batch, config.processor, config
-            ),
-            batch_size=self.hyperparameters.train_batch_size,
-            shuffle=True,
-        )
-
-        self.val_dataloader = DataLoader(
-            config.val_dataset,
-            collate_fn=lambda batch: BLIP2PLModule.eval_collate_fn(
-                batch, config.processor, config
-            ),
-            batch_size=self.hyperparameters.val_batch_size,
-            shuffle=False,
-        )
+        self.processor = config.processor
+        self.processor.tokenizer.padding_side = "left"
 
     @staticmethod
-    def create_module(
+    def prepare_module_for_training(
         model_name: str,
         ds_name: str,
         train_args: dict,
@@ -110,28 +83,82 @@ class TorchFineTuner:
         model, processor = ModelFactory.get_models(model_name, apply_qlora=apply_qlora)
 
         # Load the training and validation sets
-        train_ds, val_ds = DatasetFactory.create_dataset(ds_name, train_args, val_args)
-        if not train_ds.ready_for_training:
-            train_ds = train_ds.load()
-        if not val_ds.ready_for_training:
-            val_ds = val_ds.load()
-
-        # Load the evaluation metrics
-        metrics = load_evaluation_metrics(model=model_name, dataset=ds_name)
+        train_ds = DatasetFactory.create_dataset(ds_name, train_args)
+        val_ds = DatasetFactory.create_dataset(ds_name, val_args)
 
         # Adjust config parameters
         config = ModuleConfig(
-            torch_hyperparameters=torch_config,
-            train_dataset=train_ds,
             model_name=model_name,
-            val_dataset=val_ds,
-            metrics=metrics,
             processor=processor,
             model=model,
         )
 
-        module = TorchFineTuner(config)
+        module = FineTuner(config, torch_config, train_ds, val_ds)
         return module
+
+    @staticmethod
+    def prepare_module_for_testing(
+        model_name: str,
+        ds_name: str,
+        test_args: dict,
+        apply_qlora=True,
+    ):
+        # Load the model and processor
+        model, processor = ModelFactory.get_models(model_name, apply_qlora=apply_qlora)
+
+        # Load the training and validation sets
+        test_dataset = DatasetFactory.create_dataset(ds_name, test_args)
+
+        # Adjust config parameters
+        config = ModuleConfig(
+            model_name=model_name,
+            processor=processor,
+            model=model,
+        )
+
+        module = TorchTest(config, test_dataset)
+        return module
+
+    # Function to calculate similarity using Sentence-BERT
+    def sbert_similarity(self, sentence1, sentence2):
+        embeddings1 = self.sbert.encode(sentence1, convert_to_tensor=True)
+        embeddings2 = self.sbert.encode(sentence2, convert_to_tensor=True)
+        cosine_scores = util.pytorch_cos_sim(embeddings1, embeddings2)
+        return cosine_scores.item()
+
+
+class FineTuner(TorchBase):
+    def __init__(
+        self,
+        config: ModuleConfig,
+        hyperparameters: TorchTrainerConfig,
+        train_dataset: CustomDataset,
+        val_dataset: CustomDataset,
+    ):
+        super().__init__(config)
+
+        # Set up the run hyperparameters
+        self.hyperparameters: TorchTrainerConfig = hyperparameters
+        self.hyperparameters.set_optimizer_and_scheduler(self.model)
+        self.optimizer = self.hyperparameters.optimizer
+        self.scheduler = self.hyperparameters.scheduler
+
+        assert self.optimizer is not None
+
+        # Setup train and evaluation data loaders
+        self.train_dataloader = DataLoader(
+            train_dataset,
+            collate_fn=lambda batch: BLIP2PLModule.train_collate_fn(batch, config),
+            batch_size=self.hyperparameters.train_batch_size,
+            shuffle=True,
+        )
+
+        self.val_dataloader = DataLoader(
+            val_dataset,
+            collate_fn=lambda batch: BLIP2PLModule.eval_collate_fn(batch, config),
+            batch_size=self.hyperparameters.val_batch_size,
+            shuffle=False,
+        )
 
     def finetune(self):
         # Initialize the statistics
@@ -300,3 +327,53 @@ class TorchFineTuner:
         gc.collect()
 
         return epoch_loss
+
+
+class TorchTest(TorchBase):
+    def __init__(self, config: ModuleConfig, test_dataset: CustomDataset):
+        super().__init__(config)
+
+        self.test_dataloader = DataLoader(
+            test_dataset,
+            collate_fn=lambda batch: BLIP2PLModule.test_collate_fn(batch, config),
+            batch_size=64,
+            shuffle=False,
+        )
+
+    def test(self):
+        self.model.eval()
+
+        dataset_size = 0
+        running_similarity = 0.0
+        with torch.no_grad():
+            bar = tqdm(enumerate(self.test_dataloader), total=len(self.test_dataloader))
+            for step, (pixel_values, input_ids, attention_mask, labels) in bar:
+                # Unpack the collator values
+                pixel_values = pixel_values.to(self.device)
+                input_ids = input_ids.to(self.device)
+                attention_mask = attention_mask.to(self.device)
+
+                generated_ids = self.model.generate(
+                    pixel_values=pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens=5,
+                )
+                generated_text = self.processor.batch_decode(
+                    generated_ids, skip_special_tokens=True
+                )
+
+                for sample, label in zip(generated_text, labels):
+                    similarity = self.sbert_similarity(sample, label)
+                    running_similarity += similarity
+                    dataset_size += 1
+
+                batch_sim = running_similarity / dataset_size
+
+                wandb.log({"Train Loss": batch_sim})
+
+                bar.set_postfix(Batch=step, Test_Loss=batch_sim)
+
+        gc.collect()
+
+        return batch_sim

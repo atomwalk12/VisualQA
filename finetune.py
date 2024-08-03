@@ -2,13 +2,15 @@ import argparse
 import gc
 import logging
 import os
+import warnings
 
 import numpy as np
 import torch
 
-from lib.blip_trainer import TorchFineTuner
+from lib.blip_trainer import TorchBase
 from lib.lightning_trainer import LightningFineTune
 from lib.types import LightningConfig, TorchTrainerConfig
+from lib.utils import set_seed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,13 +61,6 @@ def get_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--debug",
-        action=argparse.BooleanOptionalAction,
-        help="Whether to activate debugging settings.",
-        default=False,
-    )
-
-    parser.add_argument(
         "--seed",
         type=int,
         help="Whether to make the results reproducible by setting a given seed.",
@@ -90,21 +85,6 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def set_seed(seed):
-    """Sets a seed for the run in order to make the results reproducible."""
-    logger.info(f"Setting seed{seed=}")
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    np.random.seed(seed)
-
-    # whether to use the torch autotuner and find the best algorithm for current hardware
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-
-    torch.cuda.manual_seed(seed)
-    torch.manual_seed(seed)
-
-
 def main(args: argparse.Namespace):
     if isinstance(args.seed, int):
         set_seed(args.seed)
@@ -113,14 +93,12 @@ def main(args: argparse.Namespace):
     train_args = {
         "split": args.train,
         "classify": classification_task,
-        "load_raw": args.generate,
-        "prepare_for_training": args.generate,
+        "load": args.generate
     }
     val_args = {
         "split": args.val,
         "classify": classification_task,
-        "load_raw": args.generate,
-        "prepare_for_training": args.generate,
+        "load": args.generate,
     }
 
     if args.use_lightning:
@@ -148,7 +126,7 @@ def main(args: argparse.Namespace):
         hyperparameters = TorchTrainerConfig(scheduler_name=args.scheduler)
 
         # Create simple fine tuning loop module
-        module = TorchFineTuner.create_module(
+        module = TorchBase.prepare_module_for_training(
             torch_config=hyperparameters,
             model_name=args.model,
             ds_name=args.dataset,
@@ -163,9 +141,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    # TODO[R]
-    # import warnings
-    # warnings.filterwarnings("ignore")
+    warnings.filterwarnings("ignore")
 
     parser = get_parser()
     args = parser.parse_args()

@@ -42,8 +42,20 @@
                 "--train",
                 "train[:350]",
                 "--val",
-                "val[:300]",
-                "--generate"
+                "val[:300]"
+            ]
+        },
+        {
+            "name": "Test, using pytorch, blip2 on easy-vqa dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2",
+                "--dataset",
+                "easy-vqa"
             ]
         },
         {

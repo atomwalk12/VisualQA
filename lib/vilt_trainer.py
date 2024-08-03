@@ -11,8 +11,8 @@ from torch.utils.data import DataLoader
 # PyTorch TensorBoard support
 from torch.utils.tensorboard import SummaryWriter
 
-from lib.lightning_trainer import BLIP2PLModule
-from lib.types import ModuleConfig
+from .lightning_trainer import BLIP2PLModule
+from .types import ModuleConfig
 
 from .representations import (
     DatasetTypes,

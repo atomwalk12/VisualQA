@@ -68,7 +68,8 @@ class BLIP2PLModule(L.LightningModule):
         self.config = config
         self.processor = config.processor
         self.model = config.model
-        self.batch_size = config.batch_size
+        self.train_batch_size = config.train_batch_size
+        self.val_batch_size = config.torch_hyperparameters.val_batch_size
         self.metrics = config.metrics
 
     def train_dataloader(self):
@@ -76,10 +77,8 @@ class BLIP2PLModule(L.LightningModule):
         # TODO Possible bottleneck if num_workers=0, use num_workers=31
         return DataLoader(
             self.config.train_dataset,
-            collate_fn=lambda batch: self.train_collate_fn(
-                batch, self.processor, self.config
-            ),
-            batch_size=self.batch_size,
+            collate_fn=lambda batch: self.train_collate_fn(batch, self.config),
+            batch_size=self.train_batch_size,
             shuffle=self.config.shuffle_train,
             num_workers=0,
         )
@@ -89,10 +88,8 @@ class BLIP2PLModule(L.LightningModule):
         # TODO Possible bottleneck if num_workers=0, use num_workers=31
         return DataLoader(
             self.config.val_dataset,
-            collate_fn=lambda batch: self.eval_collate_fn(
-                batch, self.processor, self.config
-            ),
-            batch_size=self.batch_size,
+            collate_fn=lambda batch: self.eval_collate_fn(batch, self.config),
+            batch_size=self.train_batch_size,
             shuffle=False,
             num_workers=0,
         )
@@ -119,9 +116,11 @@ class BLIP2PLModule(L.LightningModule):
     def eval_collate_fn(batch: dict, config: ModuleConfig):
         images = []
         texts = []
+        labels = []
         for item in batch:
             texts.append(item.get("prompt"))
             images.append(item.get("image"))
+            labels.append(item.get("label"))
 
         inputs = config.processor(
             images=images,
@@ -133,6 +132,30 @@ class BLIP2PLModule(L.LightningModule):
 
         return inputs
 
+    @staticmethod
+    def test_collate_fn(batch: dict, config: ModuleConfig):
+        images = []
+        texts = []
+        labels = []
+        for item in batch:
+            texts.append(item.get("prompt"))
+            images.append(item.get("image"))
+            labels.append(item.get("label"))
+
+        data = config.processor(
+            images=images,
+            text=texts,
+            padding="max_length",
+            max_length=config.max_length,
+            return_tensors="pt",
+        )
+
+        input_ids = data["input_ids"]
+        attention_mask = data["attention_mask"]
+        pixel_values = data["pixel_values"]
+
+        return pixel_values, input_ids, attention_mask, labels
+
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.config.lr)
 
@@ -143,7 +166,7 @@ class BLIP2PLModule(L.LightningModule):
         error = loss.item()
         logger.info(f"Epoch {self.current_epoch}, loss: {error}")
 
-        self.log("train_loss", error, batch_size=self.batch_size)
+        self.log("train_loss", error, batch_size=self.train_batch_size)
 
         return loss
 
@@ -163,17 +186,19 @@ class BLIP2PLModule(L.LightningModule):
             scores = metric.compute(pred=predictions, references=labels)
             for k in metric.log_columns:
                 self.log(
-                    f"{metric.name}_{k}", np.mean(scores[k]), batch_size=self.batch_size
+                    f"{metric.name}_{k}",
+                    np.mean(scores[k]),
+                    batch_size=self.train_batch_size,
                 )
 
         return scores
 
     def _log_batch_info(self, batch_idx, predictions, labels):
-        total_batches = len(self.config.val_dataset) // self.batch_size
+        total_batches = len(self.config.val_dataset) // self.train_batch_size
         logging.info(f"Batch: {batch_idx}/{total_batches}")
 
         for i, (pred, answer) in enumerate(zip(predictions, labels)):
-            element = self.config.val_dataset[batch_idx * self.batch_size + i]
+            element = self.config.val_dataset[batch_idx * self.train_batch_size + i]
             logging.info(f"Question: {element['prompt']}")
             logging.info(f"Answer: {answer}")
             logging.info(f"Prediction: {pred}")
