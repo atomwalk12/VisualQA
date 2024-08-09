@@ -5,7 +5,7 @@ import warnings
 
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
-from lib.types import ModelTypes, TrainingParameters, VQAParameters
+from lib.types import SAVE_PATHS, ModelTypes, TrainingParameters, VQAParameters
 from lib.utils import set_seed
 
 logging.basicConfig(level=logging.DEBUG)
@@ -78,8 +78,8 @@ def main(args: argparse.Namespace):
         set_seed(args.seed)
 
     logger.info("Fine tuning using Torch Trainer")
-    train_args = VQAParameters(split=args.train_split)
-    val_args = VQAParameters(split=args.val_split)
+    train_args = VQAParameters(split=args.train_split, use_stratified_split=True)
+    val_args = VQAParameters(split=args.val_split, use_stratified_split=True)
     parameters = TrainingParameters(
         resume=args.resume_training,
         model_name=args.model,
@@ -105,6 +105,7 @@ def main(args: argparse.Namespace):
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")
+    SAVE_PATHS.make_dirs()
 
     parser = get_parser()
     args = parser.parse_args()

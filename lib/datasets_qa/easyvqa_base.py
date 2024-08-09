@@ -34,6 +34,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         # Store parameters
         self.padding_max_length = params.padding_max_length
         self.processor = params.processor
+        self.use_stratified_split = params.use_stratified_split
 
         # can be train or val
         self.split: str = params.split
@@ -49,7 +50,11 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         if params.load_from_disk:
             self.load()
         else:
-            self.raw_dataset = self.initialize_raw()
+            if self.use_stratified_split:
+                self.raw_dataset = self.initialize_stratified_raw()
+            else:
+                self.raw_dataset = self.initialize_raw()
+
             self.initialize_for_training()
 
         self.is_testing = params.is_testing
@@ -57,7 +62,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
     def shuffle(self, seed):
         self._dataset = self._dataset.shuffle(seed)
 
-    def initialize_stratified_raw_dataset(self):
+    def initialize_stratified_raw(self):
         """Method to initialize the dataset."""
 
         if self.split.startswith("train") or self.split.startswith("val"):
@@ -75,22 +80,30 @@ class EasyVQADatasetBase(CustomDataset, ABC):
             "image": [Image.open(images[image_id]) for image_id in questions[2]],
         }
 
+        # Needs a shuffle, otherwise the stratification doesn't work since after
+        # filtering there will be too few entries from some classes.
         raw_dataset = Dataset.from_dict(dict)
 
         # Now filter the dataset based on the number of items requested
         split, start, end = parse_split_slicer(self.split)
-        if start is not None or end is not None:
-            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
 
         if start is not None or end is not None:
-            if split in ["train", "val"]:
-                ds = raw_dataset.map(
-                    lambda example: {"stratify_column": example["answer"]}
-                )
-                ds = ds.class_encode_column("stratify_column").train_test_split(
-                    test_size=0.1, stratify_by_column="stratify_column", seed=1220
-                )
-                raw_dataset = ds[split if split == "train" else "test"]
+            assert split in ["train", "val", "test"]
+            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
+            start = 0 if start is None else start
+            end = len(ds) if end is None else end
+
+            if split == "val" or split == "test":
+                size = end - start
+            else:
+                size = len(ds) - (end - start)
+
+            ds = ds.class_encode_column("stratify_column").train_test_split(
+                test_size=size, stratify_by_column="stratify_column", seed=1220
+            )
+            raw_dataset = ds[split if split == "train" else "test"]
+
+            assert len(raw_dataset) == size
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
@@ -207,6 +220,15 @@ class EasyVQADatasetBase(CustomDataset, ABC):
 
             for key, value in vars(loaded_data).items():
                 if hasattr(self, key):
+                    if (
+                        key == "use_stratified_split"
+                        and self.use_stratified_split != value
+                    ):
+                        raise ValueError(
+                            f"Mismatch in stratified splitting. "
+                            f"Required: {self.use_stratified_split}, "
+                            f"Dataset created with: {value}"
+                        )
                     setattr(self, key, value)
                 else:
                     raise KeyError(f"Attribute {key} not found in class instance.")
@@ -216,7 +238,10 @@ class EasyVQADatasetBase(CustomDataset, ABC):
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {complete_path}")
-            self.raw_dataset = self.initialize_raw()
+            if self.use_stratified_split:
+                self.raw_dataset = self.initialize_stratified_raw()
+            else:
+                self.raw_dataset = self.initialize_raw()
             self.initialize_for_training()
             self.save()
 

@@ -37,7 +37,8 @@ def parse_split_slicer(split: str):
     return split, start, end
 
 
-
+def make_dir(path):
+    Path(path).mkdir(parents=True, exist_ok=True)
 
 def format_time(seconds):
     """

@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import pickle
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -10,16 +11,10 @@ import numpy as np
 import pandas as pd
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
-from transformers import AutoModel, AutoProcessor, Blip2Processor
+from transformers import Blip2Processor
 from transformers import (
-    AutoModel,
-    AutoProcessor,
-    BitsAndBytesConfig,
     Blip2ForConditionalGeneration,
     Blip2Model,
-    ViltForQuestionAnswering,
-    ViltProcessor,
-    Blip2Processor,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,6 +63,11 @@ class SAVE_PATHS(StrEnum):
     BLIP2_Classifier = "data/models/classifier"
     BLIP2_BaseClassifier = "data/models/base_classifier"
 
+    def make_dirs():
+        Path(SAVE_PATHS.BLIP2_Generator).mkdir(parents=True, exist_ok=True)
+        Path(SAVE_PATHS.BLIP2_Classifier).mkdir(parents=True, exist_ok=True)
+        Path(SAVE_PATHS.BLIP2_BaseClassifier).mkdir(parents=True, exist_ok=True)
+
 
 class Metric:
     name: str
@@ -101,6 +101,7 @@ class State:
         self.current_epoch = epoch
         self.scheduler_state_dict = scheduler.state_dict()
         self.optimizer_state_dict = optimizer.state_dict()
+
         with open(f"{best_path}/{file_name}", "wb") as file:
             pickle.dump(self, file)
 
@@ -122,6 +123,7 @@ class VQAParameters:
     processor: Blip2Processor = None
     load_from_disk: bool = True
     dataset_name: str = DatasetTypes.EASY_VQA
+    use_stratified_split: bool = False
 
 
 @dataclass

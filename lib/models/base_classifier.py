@@ -4,7 +4,7 @@ import torch
 import torch.utils.checkpoint
 from easy_vqa import get_answers
 from peft.peft_model import PeftModel
-
+from torch.nn import Module
 from transformers import Blip2Config, PreTrainedModel
 
 
@@ -26,6 +26,10 @@ class Blip2ClassifierConfig(Blip2Config):
 
 
 class Blip2(PreTrainedModel):
+    model: PreTrainedModel
+    config_class: Blip2Config
+    interm_layer: Module
+
     def __init__(self, config: Blip2ClassifierConfig):
         super().__init__(config)
 
