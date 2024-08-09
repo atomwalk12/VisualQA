@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from .types import LightningConfig
+from ..types import LightningConfig
 
 logger = logging.getLogger(__name__)
 

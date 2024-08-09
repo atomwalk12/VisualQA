@@ -10,14 +10,14 @@ from tqdm import tqdm
 
 import wandb
 from config import Repositories
-from lib.base_trainer import TorchBase
-from lib.representations import SAVE_PATHS, ModelFactory, ModelTypes
+from .base_trainer import TorchBase
+from ..representations import SAVE_PATHS, ModelFactory, ModelTypes
 
-from .datasets_qa.easyvqa_classification import EasyVQAClassification
-from .models.base_classifier import Blip2ClassifierConfig
-from .models.blip2_base_classifier import Blip2BaseClassifier
-from .models.blip2_classifier import Blip2Classifier
-from .types import TrainingParameters
+from ..datasets_qa.easyvqa_classification import EasyVQAClassification
+from ..models.base_classifier import Blip2ClassifierConfig
+from ..models.blip2_base_classifier import Blip2BaseClassifier
+from ..models.blip2_classifier import Blip2Classifier
+from ..types import TrainingParameters
 
 logger = logging.getLogger(__name__)
 

@@ -16,8 +16,8 @@ from transformers import PreTrainedModel
 
 import wandb
 
-from .types import State, TrainingParameters, VQAParameters
-from .utils import ROOT_DATA_DIR, format_time, get_generator, seed_worker
+from ..types import State, TrainingParameters, VQAParameters
+from ..utils import ROOT_DATA_DIR, format_time, get_generator, seed_worker
 
 logger = logging.getLogger(__name__)
 

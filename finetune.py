@@ -3,10 +3,9 @@ import gc
 import logging
 import warnings
 
-from lib.classification_trainer import ClassificationTrainer
-from lib.generation_trainer import GenerationTrainer
-from lib.lightning_trainer import LightningFineTune
-from lib.types import LightningConfig, ModelTypes, TrainingParameters, VQAParameters
+from lib.trainers.classification_trainer import ClassificationTrainer
+from lib.trainers.generation_trainer import GenerationTrainer
+from lib.types import ModelTypes, TrainingParameters, VQAParameters
 from lib.utils import set_seed
 
 logging.basicConfig(level=logging.DEBUG)

@@ -12,10 +12,10 @@ from tqdm import tqdm
 import wandb
 from config import Repositories
 from .base_trainer import TorchBase
-from .representations import SAVE_PATHS, ModelFactory
+from ..representations import SAVE_PATHS, ModelFactory
 
-from .datasets_qa.easyvqa_generation import EasyVQAGeneration
-from .types import State, TrainingParameters
+from ..datasets_qa.easyvqa_generation import EasyVQAGeneration
+from ..types import State, TrainingParameters
 
 logger = logging.getLogger(__name__)
 
