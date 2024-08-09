@@ -4,64 +4,14 @@ import lightning as L
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import AutoProcessor
 
-from .representations import ModuleConfigGenerator
-from .types import LightningConfig, ModuleConfig
+from .types import LightningConfig
 
 logger = logging.getLogger(__name__)
 
 
-class ViltPLModule(L.LightningModule):
-    @staticmethod
-    def train_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
-        images = []
-        texts = []
-        labels = []
-        for item in batch:
-            texts.append(item.get("prompt"))
-            images.append(item.get("image"))
-            labels.append(torch.tensor(item.get("label")))
-
-        inputs = processor(
-            text=texts,
-            images=images,
-            padding=True,
-            truncation=True,
-            max_length=config.max_length,
-            return_tensors="pt",
-        )
-
-        inputs["labels"] = torch.stack(labels)
-
-        return inputs, labels
-
-    @staticmethod
-    def eval_collate_fn(batch: dict, processor: AutoProcessor, config: ModuleConfig):
-        images = []
-        texts = []
-        labels = []
-        for item in batch:
-            texts.append(item.get("prompt"))
-            images.append(item.get("image"))
-            labels.append(torch.tensor(item.get("label")))
-
-        inputs = processor(
-            text=texts,
-            images=images,
-            padding=True,
-            truncation=True,
-            max_length=config.max_length,
-            return_tensors="pt",
-        )
-
-        inputs["labels"] = torch.stack(labels)
-
-        return inputs
-
-
 class BLIP2PLModule(L.LightningModule):
-    def __init__(self, config: ModuleConfig):
+    def __init__(self, config: None):
         super().__init__()
         logger.info(config)
 
@@ -74,7 +24,7 @@ class BLIP2PLModule(L.LightningModule):
 
     def train_dataloader(self):
         assert self.config.train_dataset is not None
-        # TODO Possible bottleneck if num_workers=0, use num_workers=31
+
         return DataLoader(
             self.config.train_dataset,
             collate_fn=lambda batch: self.train_collate_fn(batch, self.config),
@@ -85,7 +35,7 @@ class BLIP2PLModule(L.LightningModule):
 
     def val_dataloader(self):
         assert self.config.val_dataset is not None
-        # TODO Possible bottleneck if num_workers=0, use num_workers=31
+
         return DataLoader(
             self.config.val_dataset,
             collate_fn=lambda batch: self.eval_collate_fn(batch, self.config),
@@ -93,68 +43,6 @@ class BLIP2PLModule(L.LightningModule):
             shuffle=False,
             num_workers=0,
         )
-
-    @staticmethod
-    def train_collate_fn(batch: dict, config: ModuleConfig):
-        images = []
-        texts = []
-        for item in batch:
-            texts.append(item.get("prompt"))
-            images.append(item.get("image"))
-
-        inputs = config.processor(
-            images=images,
-            text=texts,
-            padding="max_length",
-            max_length=config.max_length,
-            return_tensors="pt",
-        )
-
-        return inputs
-
-    @staticmethod
-    def eval_collate_fn(batch: dict, config: ModuleConfig):
-        images = []
-        texts = []
-        labels = []
-        for item in batch:
-            texts.append(item.get("prompt"))
-            images.append(item.get("image"))
-            labels.append(item.get("label"))
-
-        inputs = config.processor(
-            images=images,
-            text=texts,
-            padding="max_length",
-            max_length=config.max_length,
-            return_tensors="pt",
-        )
-
-        return inputs
-
-    @staticmethod
-    def test_collate_fn(batch: dict, config: ModuleConfig):
-        images = []
-        texts = []
-        labels = []
-        for item in batch:
-            texts.append(item.get("prompt"))
-            images.append(item.get("image"))
-            labels.append(item.get("label"))
-
-        data = config.processor(
-            images=images,
-            text=texts,
-            padding="max_length",
-            max_length=config.max_length,
-            return_tensors="pt",
-        )
-
-        input_ids = data["input_ids"]
-        attention_mask = data["attention_mask"]
-        pixel_values = data["pixel_values"]
-
-        return pixel_values, input_ids, attention_mask, labels
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.config.lr)
@@ -219,15 +107,16 @@ class LightningFineTune:
         apply_qlora=True,
         **args,
     ):
-        config = ModuleConfigGenerator.create_from(
-            model_name=model_name,
-            ds_name=ds_name,
-            train_args=train_args,
-            val_args=val_args,
-            apply_qlora=apply_qlora,
-            pickle_dir=pickle_dir,
-            **args,
-        )
+        config = None
+        # ModuleConfigGenerator.create_from(
+        #     model_name=model_name,
+        #     ds_name=ds_name,
+        #     train_args=train_args,
+        #     val_args=val_args,
+        #     apply_qlora=apply_qlora,
+        #     pickle_dir=pickle_dir,
+        #     **args,
+        # )
         module = BLIP2PLModule(config)
         return module
 

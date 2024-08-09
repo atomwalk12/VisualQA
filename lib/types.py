@@ -1,15 +1,72 @@
 import logging
+import pickle
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List
+from collections import defaultdict
+from dataclasses import dataclass, field
 
+from enum import StrEnum
 import evaluate
 import numpy as np
+import pandas as pd
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
-from transformers import AutoModel, AutoProcessor
+from transformers import AutoModel, AutoProcessor, Blip2Processor
+from transformers import (
+    AutoModel,
+    AutoProcessor,
+    BitsAndBytesConfig,
+    Blip2ForConditionalGeneration,
+    Blip2Model,
+    ViltForQuestionAnswering,
+    ViltProcessor,
+    Blip2Processor,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class DatasetTypes(StrEnum):
+    EASY_VQA = "easy-vqa"
+
+
+class ModelTypes(StrEnum):
+    BLIP2Generator = "blip2-generator"
+    BLIP2Classifier = "blip2-classifier"
+    BLIP2BaseClassifier = "blip2-base-classifier"
+
+
+class HFRepos(StrEnum):
+    BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
+    VILT = "dandelin/vilt-b32-mlm"
+
+
+# Mapping from model types to repo IDs
+MODEL_REPO_MAPPING = {
+    ModelTypes.BLIP2Generator: HFRepos.BLIP2_OPT.value,
+    ModelTypes.BLIP2Classifier: HFRepos.BLIP2_OPT.value,
+    ModelTypes.BLIP2BaseClassifier: HFRepos.BLIP2_OPT.value,
+    # TODO[F] ModelTypes.VILT: HFRepos.VILT.value,
+}
+
+# Mapping from model types to model classes
+MODEL_CLASS_MAPPING = {
+    ModelTypes.BLIP2BaseClassifier: Blip2Model,
+    ModelTypes.BLIP2Generator: Blip2ForConditionalGeneration,
+    ModelTypes.BLIP2Classifier: Blip2ForConditionalGeneration,
+    # TODO[F] ModelTypes.VILT: ViltForQuestionAnswering,
+}
+
+PROCESSOR_CLASS_MAPPING = {
+    ModelTypes.BLIP2Generator: Blip2Processor,
+    ModelTypes.BLIP2Classifier: Blip2Processor,
+    ModelTypes.BLIP2BaseClassifier: Blip2Processor,
+}
+
+
+class SAVE_PATHS(StrEnum):
+    BLIP2_Generator = "data/models/generator"
+    BLIP2_Classifier = "data/models/classifier"
+    BLIP2_BaseClassifier = "data/models/base_classifier"
 
 
 class Metric:
@@ -22,16 +79,80 @@ class Metric:
 
 
 @dataclass
-class TorchTrainerConfig:
-    num_epochs: int = 5
+class State:
+    best_epoch_loss: int = np.inf
+    history: defaultdict[list] = field(default_factory=lambda: defaultdict(list))
+    current_epoch: int = 1
+    scheduler_state_dict = None
+    optimizer_state_dict = None
+
+    def save_state(
+        self,
+        best_path: str,
+        epoch_loss: float,
+        history: dict,
+        epoch: int,
+        scheduler: lr_scheduler.CosineAnnealingLR,
+        optimizer: AdamW,
+        file_name: str = "state_dict.pkl",
+    ):
+        self.best_epoch_loss = epoch_loss
+        self.history = history
+        self.current_epoch = epoch
+        self.scheduler_state_dict = scheduler.state_dict()
+        self.optimizer_state_dict = optimizer.state_dict()
+        with open(f"{best_path}/{file_name}", "wb") as file:
+            pickle.dump(self, file)
+
+        logger.info(f"Results were saved to {best_path}/{file_name}")
+
+    @classmethod
+    def load_state(self, path):
+        try:
+            return pd.read_pickle(f"{path}/state_dict.pkl")
+        except FileNotFoundError:
+            return State()
+
+
+@dataclass
+class VQAParameters:
+    split: str
+    is_testing: bool = False
+    padding_max_length: int = 25
+    processor: Blip2Processor = None
+    load_from_disk: bool = True
+    dataset_name: str = DatasetTypes.EASY_VQA
+
+
+@dataclass
+class TrainingParameters:
+    resume: bool
+    model_name: str
+    is_trainable: bool
+    train_args: VQAParameters
+    val_args: VQAParameters
+    test_args: VQAParameters
+    wandb_project: str = "ComputerVision"
+    shuffle_train: bool = True
+
+    def __repr__(self):
+        return (
+            f"ModuleConfig(\n"
+            f"  model_name={self.model_name},\n"
+            f"  train_dataset_length={len(self.train_dataset)},\n"
+            f"  val_dataset_length={len(self.val_dataset)},\n"
+            f"  shuffle_train={self.shuffle_train}\n"
+        )
+
+    num_epochs: int = 2
     optimizer_name: str = "AdamW"
     scheduler_name: str = "CosineAnnealingLR"
     n_accumulate: int = 1
     train_batch_size: int = 64
     val_batch_size: int = 64
-    test_batch_size: int = 64
+    test_batch_size: int = 1
     optimizer: AdamW = None
-    scheduler: lr_scheduler = None
+    scheduler: lr_scheduler.CosineAnnealingLR = None
 
     def set_optimizer_and_scheduler(self, model):
         self.optimizer = self.fetch_optimizer(model)
@@ -59,27 +180,6 @@ class TorchTrainerConfig:
 
 
 @dataclass
-class ModuleConfig:
-    processor: AutoProcessor
-    model: AutoModel
-    model_name: str
-    max_length: int = 25
-    wandb_project: str = "ComputerVision"
-    shuffle_train: bool = True
-    is_training: bool = True
-
-    def __repr__(self):
-        return (
-            f"ModuleConfig(\n"
-            f"  model_name={self.model_name},\n"
-            f"  train_dataset_length={len(self.train_dataset)},\n"
-            f"  val_dataset_length={len(self.val_dataset)},\n"
-            f"  max_length={self.max_length},\n"
-            f"  shuffle_train={self.shuffle_train}\n"
-        )
-
-
-@dataclass
 class LightningConfig:
     accumulate_grad_batches = 8
     gradient_clip_val = 1.0
@@ -95,7 +195,8 @@ class LightningConfig:
 
 class CustomDataset(Dataset, ABC):
     ready_for_training: bool
-    
+    answer_space: int
+
     def __init__(self) -> None:
         super().__init__()
 

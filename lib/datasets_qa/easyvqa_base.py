@@ -1,9 +1,10 @@
 import logging
+import os
 import pickle
+from abc import ABC, abstractmethod
+from pathlib import Path
 
 import pandas as pd
-import torch
-import torch.nn.functional as F
 from datasets import Dataset
 from easy_vqa import (
     get_answers,
@@ -14,45 +15,49 @@ from easy_vqa import (
 )
 from PIL import Image
 
-from ..types import CustomDataset
-from ..utils import ROOT_DATA_DIR, get_make_complete_path, parse_split_slicer
+from ..types import CustomDataset, VQAParameters
+from ..utils import ROOT_DATA_DIR, parse_split_slicer
 
 logger = logging.getLogger(__name__)
 
 
-class EasyVQADataset(CustomDataset):
+class EasyVQADatasetBase(CustomDataset, ABC):
     raw_dataset: Dataset = None
     _dataset: Dataset = None
     ready_for_training: bool = False
 
-    def __init__(self, split: str, classify=False, load=True):
+    def __init__(self, params: VQAParameters):
         super().__init__()
-        logger.info(f"{split=}")
-        logger.info(f"{classify=}")
-        logger.info(f"{load=}")
 
-        self.classify: bool = classify
+        assert params.processor is not None
+
+        # Store parameters
+        self.padding_max_length = params.padding_max_length
+        self.processor = params.processor
 
         # can be train or val
-        self.split: str = split
+        self.split: str = params.split
 
         # Store the answer space for commodity
         self.answer_space = get_answers()
-
-        if load:
-            self.raw_dataset = self.initialize_raw()
 
         # Create mappings
         self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
         self.id_to_answer = {idx: answer for idx, answer in enumerate(self.answer_space)}
 
-        if load:
+        # Load data
+        if params.load_from_disk:
+            self.load()
+        else:
+            self.raw_dataset = self.initialize_raw()
             self.initialize_for_training()
+
+        self.is_testing = params.is_testing
 
     def shuffle(self, seed):
         self._dataset = self._dataset.shuffle(seed)
 
-    def initialize_raw_for_classification(self):
+    def initialize_stratified_raw_dataset(self):
         """Method to initialize the dataset."""
 
         if self.split.startswith("train") or self.split.startswith("val"):
@@ -113,7 +118,7 @@ class EasyVQADataset(CustomDataset):
         split, start, end = parse_split_slicer(self.split)
         if self.split.startswith("train") or self.split.startswith("val"):
             target = "test" if split.startswith("val") else split
-            raw_dataset = raw_dataset.train_test_split(test_size=0.25)[target]
+            raw_dataset = raw_dataset.train_test_split(test_size=0.25, seed=2024)[target]
 
         if start is not None or end is not None:
             raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
@@ -135,72 +140,39 @@ class EasyVQADataset(CustomDataset):
         else:
             return len(self.raw_dataset)
 
-    def __getitem__(self, index: int) -> dict:
-        """
-        Returns one item of the dataset.
+    def __getitem__(self, idx):
+        # Encode the dataset item
+        item = self.dataset[idx]
 
-        Returns:
-            image : the original Receipt image
-            target_sequence : tokenized ground truth sequence
-        """
-        if self.ready_for_training:
-            return self.dataset[index]
+        if self.split.startswith("test"):
+            padding = {}
         else:
-            assert (
-                self.raw_dataset is not None
-            ), "Please initialize the raw dataset (pass load_raw=True in the constructor)"
-            return self.raw_dataset[index]
+            padding = {"padding": "max_length", "max_length": self.padding_max_length}
+
+        encoding = self.processor(
+            images=item["image"],
+            text=item["prompt"],
+            return_tensors="pt",
+            **padding,
+        )
+
+        # remove batch dimension
+        encoding = {k: v.squeeze() for k, v in encoding.items()}
+        return item, encoding
 
     def initialize_for_training(self):
         """Prepare the dataset for training"""
+
         logger.info("Preparing data for training")
         columns_to_remove = self.raw_dataset.column_names
         columns_to_remove.remove("image")
+
+        # generate the dataset
         self._dataset = self.raw_dataset.map(
-            lambda item: self._prepared_for_training(item),
+            lambda item: self._prepare_for_training(item),
             remove_columns=columns_to_remove,
         )
         self.ready_for_training = True
-
-    def _prepared_for_training(self, item: dict):
-        """
-        Prepare a training example. When classify is true the retrieved label
-        represents a number from the answer space instead of simple text.
-        """
-        if self.classify:
-            return self._classify(item)
-        else:
-            return self._autoregression(item)
-
-    def _classify(self, item):
-        prompt = item["question"]
-        label = item["answer"]
-
-        digit = self.answers_to_id[label]
-        label = F.one_hot(torch.tensor(digit), len(self.answer_space))
-
-        return {"prompt": prompt, "label": label}
-
-    def _autoregression(self, item: dict):
-        """Generate training example based on textual labels.
-
-        Args:
-            item (dict): Raw item from self.raw_dataset
-
-        Returns:
-            str: An element to be used during training
-        """
-        input_text = item["question"]
-        label = item["answer"]
-
-        if self.split.startswith("train"):
-            prompt = f"Question: {input_text} Answer: {label}."
-        elif self.split.startswith("val") or self.split.startswith("test"):
-            prompt = f"Question: {input_text} Answer:"
-        else:
-            raise Exception(f"Flag {self.split} not recognized.")
-
-        return {"prompt": prompt, "label": label}
 
     def save(self):
         """Utility used for saving the dataset at the given output path.
@@ -210,12 +182,10 @@ class EasyVQADataset(CustomDataset):
             the name of the file.
         """
 
-        if not self._prepared_for_training:
-            raise Exception(f"First, call {self._prepared_for_training.__name__}.")
+        if not self._prepare_for_training:
+            raise Exception(f"First, call {self._prepare_for_training.__name__}.")
 
-        complete_path = get_make_complete_path(
-            dataset_name="easy-vqa", file_name=self.split
-        )
+        complete_path = self.get_make_complete_path()
 
         logger.info("Saving dataset to %s", complete_path)
 
@@ -224,15 +194,13 @@ class EasyVQADataset(CustomDataset):
                 pickle.dump(self, file)
                 logger.info(f"Saved dataset configuration to {complete_path}")
         except TypeError:
-            logger.error(f"Was not able to save pickle file at {complete_path}")
+            logger.warning(f"Pickle file not found at at {complete_path}.")
             raise
 
     def load(self):
         """Utility to load the pickle from a given path."""
         assert not self.ready_for_training
-        complete_path = get_make_complete_path(
-            file_name=self.split, dataset_name="easy-vqa"
-        )
+        complete_path = self.get_make_complete_path()
 
         try:
             loaded_data = pd.read_pickle(complete_path)
@@ -241,14 +209,13 @@ class EasyVQADataset(CustomDataset):
                 if hasattr(self, key):
                     setattr(self, key, value)
                 else:
-                    logger.warning(f"Attribute {key} not found in class instance.")
+                    raise KeyError(f"Attribute {key} not found in class instance.")
 
             logger.info(f"Loaded {len(self._dataset)
                                   } items from {complete_path}")
             return self
         except FileNotFoundError:
-            logger.error(f"Was not able to load pickle file at {
-                         complete_path}")
+            logger.error(f"Was not able to load pickle file at {complete_path}")
             self.raw_dataset = self.initialize_raw()
             self.initialize_for_training()
             self.save()
@@ -256,3 +223,15 @@ class EasyVQADataset(CustomDataset):
     def equals(self, other: Dataset):
         dataset = self.dataset.to_pandas()
         return dataset.equals(other.to_pandas())
+
+    @abstractmethod
+    def _prepare_for_training(self, item: dict):
+        pass
+
+    def get_make_complete_path(self, type):
+        # type will be instantiated in subclass
+        assert type is not None
+
+        Path(f"{ROOT_DATA_DIR}/easy_vqa/{type}").mkdir(parents=True, exist_ok=True)
+        out = f"{ROOT_DATA_DIR}/easy_vqa/{type}/{self.split}.pkl"
+        return os.path.abspath(out)

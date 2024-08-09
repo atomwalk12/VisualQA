@@ -4,8 +4,15 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from datetime import datetime
+from transformers import PreTrainedModel
+from enum import StrEnum
+import numpy
+import random
 
 ROOT_DATA_DIR = "data/"
+MODELS_DIR = f"{ROOT_DATA_DIR}/models/"
+
 
 
 logging.basicConfig(level=logging.INFO)
@@ -30,30 +37,6 @@ def parse_split_slicer(split: str):
     return split, start, end
 
 
-def is_dir(path):
-    p = Path(path)
-    return p.is_dir()
-
-
-def get_make_complete_path(file_name, dataset_name):
-    Path(f"{ROOT_DATA_DIR}/{dataset_name}").mkdir(parents=True, exist_ok=True)
-
-    out = f"{ROOT_DATA_DIR}/{dataset_name}/{file_name}.pkl"
-    return os.path.abspath(out)
-
-
-def existing_directory(arg: str):
-    """Return `Path(arg)` but raise a `ValueError` if it does not refer to an
-    existing directory."""
-    path = Path(arg)
-    if not path.is_dir():
-        raise ValueError(f"{arg=}) is not a directory")
-
-    return path
-
-
-def likely_pickle_dir(dataset_name):
-    return f"{ROOT_DATA_DIR}/{dataset_name}"
 
 
 def format_time(seconds):
@@ -79,3 +62,16 @@ def set_seed(seed):
 
     torch.cuda.manual_seed(seed)
     torch.manual_seed(seed)
+
+
+
+def seed_worker(seed_worker):
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def get_generator():
+    g = torch.Generator()
+    g.manual_seed(0)
+    return g

@@ -1,50 +1,29 @@
+from unittest.mock import MagicMock
 import pytest
 
-from ..lib.representations import DatasetTypes
+from ..lib.types import DatasetTypes, VQAParameters
 
-from ..lib.datasets_qa.easyvqa import EasyVQADataset
+from ..lib.datasets_qa.easyvqa_generation import EasyVQAGeneration
 from ..lib.visualization import show_images_with_captions
+from transformers import Blip2Processor
 
 
 @pytest.fixture(scope="module")
 def train_ds():
     # Get cached dataset is available, otherwise generate a new one
-    dir = f"./data/{DatasetTypes.EASY_VQA.value}"
-    train_ds = EasyVQADataset(split="train[16:25]", load_raw=False)
-
-    try:
-        train_ds = train_ds.load(dir)
-    except FileNotFoundError:
-        train_ds = EasyVQADataset(split="train[16:25]", load_raw=True)
-        train_ds.initialize_for_training()
-        train_ds.save(dir)
-
-    return train_ds
-
-
-@pytest.fixture(scope="module")
-def train_raw_ds(request):
-    # Get cached dataset is available, otherwise generate a new one
-    train_ds = EasyVQADataset(split="val[16:25]", load_raw=True)
+    processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+    args = VQAParameters(split="train[16:25]", processor=processor, load_from_disk=False)
+    train_ds = EasyVQAGeneration(args)
 
     return train_ds
 
 
 def test_show_train_samples(train_ds):
-    elements = train_ds[:9]
-
-    show_images_with_captions(
-        images_or_paths=elements["image"], captions=elements["prompt"]
-    )
-
-
-def test_show_test_samples(train_raw_ds):
-    elements = train_raw_ds[2:5]
+    elements = train_ds.raw_dataset[2:5]
 
     captions = [
         f"Question: {question} Answer: {answer}"
         for question, answer in zip(elements["question"], elements["answer"])
     ]
 
-    show_images_with_captions(
-        images_or_paths=elements["image"], captions=captions)
+    show_images_with_captions(images_or_paths=elements["image"], captions=captions)

@@ -1,5 +1,4 @@
 import logging
-from enum import Enum
 from typing import Tuple
 
 import torch
@@ -9,74 +8,47 @@ from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
     Blip2ForConditionalGeneration,
-    ViltForQuestionAnswering,
-    ViltProcessor,
     Blip2Processor,
+    Conv1D,
 )
 
-from .utils import likely_pickle_dir
-
-
-from .datasets_qa.easyvqa import EasyVQADataset
-from .types import BertScoreMetric, CustomDataset, ModuleConfig
+from .types import (
+    MODEL_CLASS_MAPPING,
+    MODEL_REPO_MAPPING,
+    PROCESSOR_CLASS_MAPPING,
+    SAVE_PATHS,
+    ModelTypes,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class DatasetTypes(str, Enum):
-    EASY_VQA = "easy-vqa"
-
-
-class ModelTypes(str, Enum):
-    BLIP2 = "blip2"
-    VILT = "vilt"
-
-
-class HFRepos(str, Enum):
-    BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
-    VILT = "dandelin/vilt-b32-mlm"
-
-
-# Mapping from model types to repo IDs
-MODEL_REPO_MAPPING = {
-    ModelTypes.BLIP2: HFRepos.BLIP2_OPT.value,
-    ModelTypes.VILT: HFRepos.VILT.value,
-}
-
-# Mapping from model types to model classes
-MODEL_CLASS_MAPPING = {
-    ModelTypes.BLIP2: Blip2ForConditionalGeneration,
-    ModelTypes.VILT: ViltForQuestionAnswering,
-}
-
-PROCESSOR_CLASS_MAPPING = {
-    ModelTypes.BLIP2: Blip2Processor,
-    ModelTypes.VILT: ViltProcessor,
-}
-
-
-class DatasetFactory:
-    @staticmethod
-    def create_dataset(dataset_type: DatasetTypes, args: dict) -> CustomDataset:
-        # Get corresponding datatbase class
-        dataset_rep_to_generator_type = {DatasetTypes.EASY_VQA: EasyVQADataset}
-
-        if dataset_type not in dataset_rep_to_generator_type:
-            raise ValueError(f"Invalid dataset type: {dataset_type}")
-
-        generator = dataset_rep_to_generator_type[dataset_type]
-
-        logger.info(f"Initializing dataset generator {generator.__name__}")
-
-        dataset = generator(**args)
-        
-        if not dataset.ready_for_training:
-            dataset.load()
-
-        return dataset
+def get_models_dir(classif: bool, model_name: str):
+    if classif:
+        if model_name == ModelTypes.BLIP2Base:
+            return SAVE_PATHS.BLIP2_BaseClassifier
+        elif model_name == ModelTypes.BLIP2:
+            return SAVE_PATHS.BLIP2_Classifier
+    elif model_name == ModelTypes.BLIP2:
+        return SAVE_PATHS.BLIP2_Generator
 
 
 class ModelFactory:
+    def get_specific_layer_names(model):
+        # Create a list to store the layer names
+        layer_names = []
+
+        # Recursively visit all modules and submodules
+        for name, module in model.named_modules():
+            # Check if the module is an instance of the specified layers
+            if isinstance(
+                module, (torch.nn.Linear, torch.nn.Embedding, torch.nn.Conv2d, Conv1D)
+            ):
+                # model name parsing
+                layer_names.append(name)
+
+        return list(set(layer_names))
+
     @staticmethod
     def create_bnb_config() -> BitsAndBytesConfig:
         """Create a BitsAndBytesConfig for quantization."""
@@ -98,7 +70,7 @@ class ModelFactory:
         )
 
     def get_models(
-        model_name: ModelTypes, apply_qlora: bool = True
+        model_name: ModelTypes, apply_lora: bool
     ) -> Tuple[AutoModel, AutoProcessor]:
         """
         Get the model and processor for a given model type.
@@ -116,57 +88,25 @@ class ModelFactory:
         if model_name not in MODEL_REPO_MAPPING:
             raise ValueError(f"Invalid model type: {model_name}")
 
-        repo_id = MODEL_REPO_MAPPING[model_name]
-        model_class = MODEL_CLASS_MAPPING[model_name]
-        processor_class = PROCESSOR_CLASS_MAPPING[model_name]
+        repo_id: str = MODEL_REPO_MAPPING[model_name]
+        model_class: Blip2ForConditionalGeneration = MODEL_CLASS_MAPPING[model_name]
+        processor_class: Blip2Processor = PROCESSOR_CLASS_MAPPING[model_name]
 
         # Load both the processor and model
         processor = processor_class.from_pretrained(repo_id)
 
-        if apply_qlora:
-            bnb_config = ModelFactory.create_bnb_config()
-            model = model_class.from_pretrained(
-                repo_id, torch_dtype=torch.float16, quantization_config=bnb_config
-            )
+        bnb_config = ModelFactory.create_bnb_config()
+        model = model_class.from_pretrained(
+            repo_id, torch_dtype=torch.float16, quantization_config=bnb_config
+        )
 
+        if apply_lora:
             lora_config = ModelFactory.create_lora_config()
 
             model = prepare_model_for_kbit_training(
                 model, use_gradient_checkpointing=True
             )
             model = get_peft_model(model, lora_config)
-        else:
-            model = model_class.from_pretrained(repo_id)
+            model.print_trainable_parameters()
 
         return model, processor
-
-
-
-class ModuleConfigGenerator:
-    @staticmethod
-    def create_from(
-        model_name,
-        ds_name,
-        train_args,
-        val_args,
-        apply_qlora=True,
-        shuffle_train=True,
-    ):
-        # Load the model and processor
-        model, processor = ModelFactory.get_models(model_name, apply_qlora=apply_qlora)
-
-        # Load the training and validation sets
-        train_ds, val_ds = DatasetFactory.create_dataset(ds_name, train_args, val_args)
-        train_ds = train_ds.load()
-        val_ds = val_ds.load()
-
-
-        # Adjust config parameters
-        return ModuleConfig(
-            train_dataset=train_ds,
-            model_name=model_name,
-            val_dataset=val_ds,
-            processor=processor,
-            model=model,
-            shuffle_train=shuffle_train,
-        )

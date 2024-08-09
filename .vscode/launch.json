@@ -22,58 +22,126 @@
                 "blip2",
                 "--dataset",
                 "easy-vqa",
-                "--train",
+                "--train-split",
                 "train[:100]",
-                "--val",
+                "--val-split",
                 "val[:30]"
             ]
         },
         {
-            "name": "Fine-tune, using pytorch, blip2 on easy-vqa dataset",
+            "name": "Fine-tune blip2 on easy-vqa dataset",
             "type": "debugpy",
             "request": "launch",
             "program": "finetune.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2",
+                "blip2-generator",
                 "--dataset",
                 "easy-vqa",
-                "--train",
-                "train[:350]",
-                "--val",
-                "val[:300]"
+                "--train-split",
+                "train[:30]",
+                "--val-split",
+                "val[:30]",
+                // "--resume-training"
             ]
         },
         {
-            "name": "Test, using pytorch, blip2 on easy-vqa dataset",
+            "name": "Fine-tune classifier on easy-vqa dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--train-split",
+                "train[:80]",
+                "--val-split",
+                "train[:80]",
+                //"--resume-training"
+            ]
+        },
+        {
+            "name": "Fine tune base classifier on easy-vqa dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-base-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--train-split",
+                "train[:85]",
+                "--val-split",
+                "train[:80]",
+                // "--resume-training"
+            ]
+        },
+        // {
+        //     "name": "Fine-tune, using pytorch, VILT (classification-task) on easy-vqa dataset",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "program": "finetune.py",
+        //     "console": "integratedTerminal",
+        //     "args": [
+        //         "--model",
+        //         "vilt",
+        //         "--dataset",
+        //         "easy-vqa",
+        //         "--train-split",
+        //         "train[:350]",
+        //         "--val-split",
+        //         "val[:300]"
+        //     ]
+        // },
+        {
+            "name": "Test, blip2-generator on easy-vqa dataset",
             "type": "debugpy",
             "request": "launch",
             "program": "test.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2",
+                "blip2-generator",
                 "--dataset",
-                "easy-vqa"
+                "easy-vqa",
+                "--test-split",
+                "test[:30]"
             ]
         },
         {
-            "name": "Fine tune BLIP 2 using lightning",
+            "name": "Test, blip2-classifier on classification easy-vqa dataset",
             "type": "debugpy",
             "request": "launch",
-            "program": "finetune.py",
+            "program": "test.py",
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2",
+                "blip2-classifier",
                 "--dataset",
                 "easy-vqa",
-                "--train",
-                "train[:100]",
-                "--val",
-                "val[:30]",
-                "--use-lightning"
+                "--test-split",
+                "train[:30]",
+            ]
+        },
+        {
+            "name": "Test, blip2-base-classifier on classification base easy-vqa dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-base-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--test-split",
+                "train[:30]",
             ]
         },
         {
@@ -83,16 +151,5 @@
             "program": "inference.py",
             "console": "integratedTerminal",
         },
-        {
-            "name": "Python: Debug Tests",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "purpose": [
-                "debug-test"
-            ],
-            "console": "integratedTerminal",
-            "justMyCode": false,
-        }
     ]
 }

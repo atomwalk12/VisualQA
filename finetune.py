@@ -1,18 +1,15 @@
 import argparse
 import gc
 import logging
-import os
 import warnings
 
-import numpy as np
-import torch
-
-from lib.blip_trainer import TorchBase
+from lib.classification_trainer import ClassificationTrainer
+from lib.generation_trainer import GenerationTrainer
 from lib.lightning_trainer import LightningFineTune
-from lib.types import LightningConfig, TorchTrainerConfig
+from lib.types import LightningConfig, ModelTypes, TrainingParameters, VQAParameters
 from lib.utils import set_seed
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -21,10 +18,9 @@ def get_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--model",
-        choices=["blip2", "vilt"],
+        choices=[choice for choice in ModelTypes],
         type=str,
-        default="blip2",
-        help="The type of model to finetune on",
+        help="The model type to finetune",
     )
     parser.add_argument(
         "--dataset",
@@ -39,7 +35,7 @@ def get_parser() -> argparse.ArgumentParser:
     # Use train[:count] to retrieve a specific number of items.
     # If train is used, it will fetch the entire dataset.
     parser.add_argument(
-        "--train",
+        "--train-split",
         type=str,
         help="Number of training examples to generate.",
         default="train",
@@ -47,13 +43,14 @@ def get_parser() -> argparse.ArgumentParser:
 
     # Same semnatics as in --train
     parser.add_argument(
-        "--val",
+        "--val-split",
         type=str,
         help="Number of validation examples to generate.",
         default="val",
     )
 
     # Whether to use the lightning trainer or not
+    # TODO remove this part
     parser.add_argument(
         "--use-lightning",
         action=argparse.BooleanOptionalAction,
@@ -68,16 +65,8 @@ def get_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--scheduler",
-        type=str,
-        help="Scheduler to use",
-        choices=["CosineAnnealingLR", "CosineAnnealingWarmRestarts"],
-        default="CosineAnnealingLR",
-    )
-
-    parser.add_argument(
-        "--generate",
-        help="Whether to generate the dataset if it doesn't exist",
+        "--resume-training",
+        help="Whether to continue training from checkpoint",
         action=argparse.BooleanOptionalAction,
         default=False,
     )
@@ -89,55 +78,30 @@ def main(args: argparse.Namespace):
     if isinstance(args.seed, int):
         set_seed(args.seed)
 
-    classification_task = True if args.model == "vilt" else False
-    train_args = {
-        "split": args.train,
-        "classify": classification_task,
-        "load": args.generate
-    }
-    val_args = {
-        "split": args.val,
-        "classify": classification_task,
-        "load": args.generate,
-    }
+    logger.info("Fine tuning using Torch Trainer")
+    train_args = VQAParameters(split=args.train_split)
+    val_args = VQAParameters(split=args.val_split)
+    parameters = TrainingParameters(
+        resume=args.resume_training,
+        model_name=args.model,
+        is_trainable=True,
+        train_args=train_args,
+        val_args=val_args,
+        test_args=None,
+    )
 
-    if args.use_lightning:
-        logger.info("Fine tuning using torch lightning")
+    if args.model == ModelTypes.BLIP2Generator:
+        module = GenerationTrainer(parameters)
+    elif (
+        args.model == ModelTypes.BLIP2Classifier
+        or args.model == ModelTypes.BLIP2BaseClassifier
+    ):
+        module = ClassificationTrainer(parameters)
 
-        # Create the lighting module used for fine-tuning.
-        module = LightningFineTune.create_module(
-            model_name=args.model,
-            ds_name=args.dataset,
-            train_args=train_args,
-            val_args=val_args,
-        )
+    model, history = module.finetune()
 
-        # Lightning configuration file: contains batch_size, lr, etc.
-        config = LightningConfig(
-            limit_train_batches=args.limit_train_batches,
-            limit_val_batches=args.limit_val_batches,
-        )
-
-        trainer = LightningFineTune(config)
-        trainer.finetune(module)
-    else:
-        logger.info("Fine tuning using manual loop")
-
-        hyperparameters = TorchTrainerConfig(scheduler_name=args.scheduler)
-
-        # Create simple fine tuning loop module
-        module = TorchBase.prepare_module_for_training(
-            torch_config=hyperparameters,
-            model_name=args.model,
-            ds_name=args.dataset,
-            train_args=train_args,
-            val_args=val_args,
-        )
-
-        model, history = module.finetune()
-
-        del model, history, module
-        _ = gc.collect()
+    del model, history, module
+    _ = gc.collect()
 
 
 if __name__ == "__main__":
