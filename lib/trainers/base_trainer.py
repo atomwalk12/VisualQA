@@ -14,11 +14,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import PreTrainedModel
 
-from ..utils import EXPERIMENT
 import wandb
 
-from ..types import State, TrainingParameters, VQAParameters
-from ..utils import ROOT_DATA_DIR, format_time
+from ..types import State, Suffix, TrainingParameters, VQAParameters
+from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,17 @@ class TorchBase(ABC):
         if not self.resume:
             self.state = State()
         else:
-            self.state = State.load_state(self.best_path)
+            # Somewhat fragile to test against this variable but is cleaner than
+            # introducing other state.
+            suffix = Suffix.Train if config.is_trainable else Suffix.Test
+
+            if suffix == Suffix.Train:
+                assert self.train_dataloader is not None, "Train dataloader must be provided for training."
+                assert self.val_dataloader is not None, "Validation dataloader must be provided for training."
+            else:
+                assert self.test_dataloader is not None, "Test dataloader must be provided for testing."
+
+            self.state = State.load_state(self.best_path, suffix=suffix)
             self.optimizer.load_state_dict(self.state.optimizer_state_dict)
             self.scheduler.load_state_dict(self.state.scheduler_state_dict)
 
@@ -159,9 +168,7 @@ class TorchBase(ABC):
 
             # Save the best result
             if val_loss <= best_epoch_loss:
-                print(
-                    f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})"
-                )
+                print(f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})")
                 # Update best loss
                 best_epoch_loss = val_loss
 
@@ -178,7 +185,13 @@ class TorchBase(ABC):
                 print(f"Model Saved{reset} --> {self.best_path}")
 
             # Saving the epoch which is supposed to be the next
-            self.save_state(best_epoch_loss, history, epoch + 1)
+            self.save_state(
+                best_epoch_loss,
+                history,
+                epoch + 1,
+                Suffix.Train,
+                self.train_dataloader.dataset,
+            )
 
             print()
 
@@ -218,9 +231,7 @@ class TorchBase(ABC):
         bar = tqdm(enumerate(self.train_dataloader), total=len(self.train_dataloader))
         for step, data in bar:
             # Unpack the batch
-            input_ids, pixel_values, attention_mask, labels = (
-                self.send_to_device_if_needed(data)
-            )
+            input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(data)
 
             # Current batch size, can be less than self.batch_size for the last batch
             batch_size = input_ids.size(0)
@@ -275,9 +286,7 @@ class TorchBase(ABC):
             bar = tqdm(enumerate(self.val_dataloader), total=len(self.val_dataloader))
             for step, data in bar:
                 # Unpack the collator values
-                input_ids, pixel_values, attention_mask, labels = (
-                    self.send_to_device_if_needed(data)
-                )
+                input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(data)
 
                 # Get the batch size
                 batch_size = input_ids.size(0)
@@ -322,9 +331,7 @@ class TorchBase(ABC):
             filename=f"{ROOT_DATA_DIR}/logs/{self.model_name}/{datetime.now().strftime('_%H_%M_%d_%m_%Y.log')}"
         )
         handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
@@ -366,5 +373,5 @@ class TorchBase(ABC):
         pass
 
     @abstractmethod
-    def save_state(self, best_epoch_loss, history, epoch):
+    def save_state(self, best_epoch_loss, history, epoch, suffix, dataset):
         pass

@@ -1,5 +1,5 @@
 from ..datasets_qa.easyvqa_base import EasyVQADatasetBase
-from ..types import VQAParameters
+from ..types import Suffix, VQAParameters
 
 
 class EasyVQAGeneration(EasyVQADatasetBase):
@@ -18,9 +18,9 @@ class EasyVQAGeneration(EasyVQADatasetBase):
         input_text = item["question"]
         label = item["answer"]
 
-        if self.split.startswith("train"):
+        if self.split.startswith(Suffix.Train):
             prompt = f"Question: {input_text} Answer: {label}."
-        elif self.split.startswith("val") or self.split.startswith("test"):
+        elif self.split.startswith(Suffix.Val) or self.split.startswith(Suffix.Test):
             prompt = f"Question: {input_text} Answer:"
         else:
             raise Exception(f"Flag {self.split} not recognized.")

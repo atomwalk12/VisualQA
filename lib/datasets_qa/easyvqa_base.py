@@ -14,9 +14,9 @@ from easy_vqa import (
     get_train_questions,
 )
 from PIL import Image
-from ..utils import EXPERIMENT
-from ..types import CustomDataset, VQAParameters
-from ..utils import ROOT_DATA_DIR, parse_split_slicer
+
+from ..types import CustomDataset, Suffix, VQAParameters
+from ..utils import EXPERIMENT, ROOT_DATA_DIR, parse_split_slicer
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +62,10 @@ class EasyVQADatasetBase(CustomDataset, ABC):
     def initialize_stratified_raw(self):
         """Method to initialize the dataset."""
 
-        if self.split.startswith("train") or self.split.startswith("val"):
+        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
             questions = get_train_questions()
             images = get_train_image_paths()
-        elif self.split.startswith("test"):
+        elif self.split.startswith(Suffix.Test):
             questions = get_test_questions()
             images = get_test_image_paths()
 
@@ -85,12 +85,12 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         split, start, end = parse_split_slicer(self.split)
 
         if start is not None or end is not None:
-            assert split in ["train", "val", "test"]
+            assert split in [choice for choice in Suffix]
             ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
             start = 0 if start is None else start
             end = len(ds) if end is None else end
 
-            if split == "val" or split == "test":
+            if split == Suffix.Val or split == Suffix.Test:
                 size = end - start
             else:
                 size = len(ds) - (end - start)
@@ -100,7 +100,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
                 stratify_by_column="stratify_column",
                 seed=EXPERIMENT.get_seed(),
             )
-            raw_dataset = ds[split if split == "train" else "test"]
+            raw_dataset = ds[split if split == Suffix.Train else Suffix.Test]
 
             assert len(raw_dataset) == end - start
 
@@ -110,10 +110,10 @@ class EasyVQADatasetBase(CustomDataset, ABC):
     def initialize_raw(self):
         """Method to initialize the dataset."""
 
-        if self.split.startswith("train") or self.split.startswith("val"):
+        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
             questions = get_train_questions()
             images = get_train_image_paths()
-        elif self.split.startswith("test"):
+        elif self.split.startswith(Suffix.Test):
             questions = get_test_questions()
             images = get_test_image_paths()
 
@@ -128,11 +128,9 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         raw_dataset = Dataset.from_dict(dict)
 
         split, start, end = parse_split_slicer(self.split)
-        if self.split.startswith("train") or self.split.startswith("val"):
-            target = "test" if split.startswith("val") else split
-            raw_dataset = raw_dataset.train_test_split(
-                test_size=0.25, seed=EXPERIMENT.get_seed()
-            )[target]
+        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
+            target = Suffix.Test if split.startswith(Suffix.Val) else split
+            raw_dataset = raw_dataset.train_test_split(test_size=0.25, seed=EXPERIMENT.get_seed())[target]
 
         if start is not None or end is not None:
             raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
@@ -143,9 +141,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
     @property
     def dataset(self):
         if self._dataset is None:
-            raise Exception(
-                "Please call transform() before accessing the training dataset."
-            )
+            raise Exception("Please call transform() before accessing the training dataset.")
         return self._dataset
 
     def __len__(self) -> int:
@@ -158,7 +154,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         # Encode the dataset item
         item = self.dataset[idx]
 
-        if self.split.startswith("test"):
+        if self.split.startswith(Suffix.Test):
             padding = {}
         else:
             padding = {"padding": "max_length", "max_length": self.padding_max_length}
@@ -221,10 +217,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
 
             for key, value in vars(loaded_data).items():
                 if hasattr(self, key):
-                    if (
-                        key == "use_stratified_split"
-                        and self.use_stratified_split != value
-                    ):
+                    if key == "use_stratified_split" and self.use_stratified_split != value:
                         raise ValueError(
                             f"Mismatch in stratified splitting. "
                             f"Required: {self.use_stratified_split}, "

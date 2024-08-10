@@ -1,21 +1,17 @@
 import logging
-from pathlib import Path
 import pickle
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-
 from enum import StrEnum
+from pathlib import Path
+
 import evaluate
 import numpy as np
 import pandas as pd
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
-from transformers import Blip2Processor
-from transformers import (
-    Blip2ForConditionalGeneration,
-    Blip2Model,
-)
+from transformers import Blip2ForConditionalGeneration, Blip2Model, Blip2Processor
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +28,11 @@ class ModelTypes(StrEnum):
 
 class HFRepos(StrEnum):
     BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
+    
+class Suffix(StrEnum):
+    Test = "test"
+    Train = "train"
+    Val = "val"
 
 
 # Mapping from model types to repo IDs
@@ -66,6 +67,26 @@ class SAVE_PATHS(StrEnum):
         Path(SAVE_PATHS.BLIP2_BaseClassifier).mkdir(parents=True, exist_ok=True)
 
 
+class CustomDataset(Dataset, ABC):
+    ready_for_training: bool
+    answer_space: int
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def save():
+        pass
+
+    @abstractmethod
+    def initialize_for_training():
+        pass
+
+    @abstractmethod
+    def load():
+        pass
+
+
 class Metric:
     name: str
     log_columns: []
@@ -82,6 +103,7 @@ class State:
     current_epoch: int = 1
     scheduler_state_dict = None
     optimizer_state_dict = None
+    dataset: CustomDataset = None
 
     def save_state(
         self,
@@ -91,6 +113,7 @@ class State:
         epoch: int,
         scheduler: lr_scheduler.CosineAnnealingLR,
         optimizer: AdamW,
+        dataset: CustomDataset,
         file_name: str = "state_dict.pkl",
     ):
         self.best_epoch_loss = epoch_loss
@@ -98,6 +121,7 @@ class State:
         self.current_epoch = epoch
         self.scheduler_state_dict = scheduler.state_dict()
         self.optimizer_state_dict = optimizer.state_dict()
+        self.dataset = dataset
 
         with open(f"{best_path}/{file_name}", "wb") as file:
             pickle.dump(self, file)
@@ -105,9 +129,9 @@ class State:
         logger.info(f"Results were saved to {best_path}/{file_name}")
 
     @classmethod
-    def load_state(self, path):
+    def load_state(self, path, suffix = Suffix.Train | Suffix.Test):
         try:
-            return pd.read_pickle(f"{path}/state_dict.pkl")
+            return pd.read_pickle(f"{path}/{suffix}_state_dict.pkl")
         except FileNotFoundError:
             return State()
 
@@ -190,27 +214,6 @@ class LightningConfig:
             limit_train_batches if limit_train_batches is None else 1.0
         )
         self.limit_val_batches = limit_val_batches if limit_val_batches is None else 1.0
-
-
-class CustomDataset(Dataset, ABC):
-    ready_for_training: bool
-    answer_space: int
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    @abstractmethod
-    def save():
-        pass
-
-    @abstractmethod
-    def initialize_for_training():
-        pass
-
-    @abstractmethod
-    def load():
-        pass
-
 
 
 class BertScoreMetric(Metric):

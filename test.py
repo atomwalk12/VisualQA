@@ -49,7 +49,7 @@ def evaluate_model(args):
         split=args.test_split, is_testing=True, use_stratified_split=True
     )
     parameters = TrainingParameters(
-        resume=True,
+        resume=False,
         model_name=args.model,
         is_trainable=False,
         train_args=None,

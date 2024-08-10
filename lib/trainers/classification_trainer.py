@@ -10,14 +10,14 @@ from tqdm import tqdm
 
 import wandb
 from config import Repositories
-from .base_trainer import TorchBase
-from ..representations import SAVE_PATHS, ModelFactory, ModelTypes
 
 from ..datasets_qa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2, Blip2ClassifierConfig
 from ..models.blip2_base_classifier import Blip2BaseClassifier
 from ..models.blip2_classifier import Blip2Classifier
-from ..types import TrainingParameters
+from ..representations import SAVE_PATHS, ModelFactory, ModelTypes
+from ..types import Suffix, TrainingParameters
+from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
+
+        self.update_frequency = 25
 
     def get_repository(self):
         if self.model_name == ModelTypes.BLIP2BaseClassifier:
@@ -42,9 +44,7 @@ class ClassificationTrainer(TorchBase):
     def load_from_checkpoint(self, is_trainable):
         base_model, processor = ModelFactory.get_models(self.model_name, apply_lora=False)
 
-        base_model = prepare_model_for_kbit_training(
-            base_model, use_gradient_checkpointing=True
-        )
+        base_model = prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
         local_model_path = self.get_model_save_path()
         if self.model_name == ModelTypes.BLIP2Classifier:
@@ -120,23 +120,25 @@ class ClassificationTrainer(TorchBase):
                     running_similarity += similarity
                     dataset_size += 1
 
-                batch_sim = running_similarity / dataset_size
+                best_epoch_loss = running_similarity / dataset_size
 
-                history["Test Loss"].append(batch_sim)
-                wandb.log({"Test Loss": batch_sim})
+                history["Test Loss"].append(best_epoch_loss)
+                wandb.log({"Test Loss": best_epoch_loss})
 
-                bar.set_postfix(Batch=step, Test_Loss=batch_sim)
+                bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
 
-        # save the state
-        self.state.save_state(
-            self.best_path,
-            None,
-            history,
-            len(self.test_dataloader),
-            self.scheduler,
-            self.optimizer,
-            f"{self.model_name}_test_results.pkl",
-        )
+                # Save the state
+                if step % self.update_frequency == 0:
+                    self.save_state(
+                        best_epoch_loss,
+                        history,
+                        step + 1,
+                        Suffix.Test,
+                        self.test_dataloader.dataset,
+                    )
+
+        # Save the entire results
+        self.save_state(best_epoch_loss, history, step + 1, Suffix.Test, self.test_dataloader.dataset)
 
         # Release resources
         gc.collect()
@@ -160,7 +162,7 @@ class ClassificationTrainer(TorchBase):
         # This is done automatically within the model's state. Nothing to do.
         pass
 
-    def save_state(self, best_epoch_loss, history, epoch):
+    def save_state(self, best_epoch_loss, history, epoch, suffix, dataset):
         # This should always be true, but checking for intellisense completion.
         assert isinstance(self.model, Blip2)
 
@@ -174,4 +176,6 @@ class ClassificationTrainer(TorchBase):
             epoch,
             self.scheduler,
             self.optimizer,
+            dataset,
+            file_name=f"{suffix}_state_dict.pkl",
         )

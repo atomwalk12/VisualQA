@@ -11,11 +11,11 @@ from tqdm import tqdm
 
 import wandb
 from config import Repositories
-from .base_trainer import TorchBase
-from ..representations import SAVE_PATHS, ModelFactory
 
 from ..datasets_qa.easyvqa_generation import EasyVQAGeneration
-from ..types import State, TrainingParameters
+from ..representations import SAVE_PATHS, ModelFactory
+from ..types import Suffix, TrainingParameters
+from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
 
-        self.state = State()
+        self.update_frequency = 25
 
     def get_repository(self):
         return Repositories.VQAGeneration
@@ -35,9 +35,7 @@ class GenerationTrainer(TorchBase):
     def load_from_checkpoint(self, is_trainable):
         base_model, processor = ModelFactory.get_models(self.model_name, apply_lora=False)
 
-        base_model = prepare_model_for_kbit_training(
-            base_model, use_gradient_checkpointing=True
-        )
+        base_model = prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
         local_model_path = self.get_model_save_path()
         model = PeftModel.from_pretrained(
@@ -78,31 +76,37 @@ class GenerationTrainer(TorchBase):
                     attention_mask=attention_mask,
                     max_new_tokens=5,
                 )
-                generated_text = self.processor.batch_decode(
-                    generated_ids, skip_special_tokens=True
-                )
+                generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
                 for sample, label in zip(generated_text, labels):
                     similarity = self.sbert_similarity(sample, label)
                     running_similarity += similarity
                     dataset_size += 1
 
-                batch_sim = running_similarity / dataset_size
+                best_epoch_loss = running_similarity / dataset_size
 
-                history["Test Loss"].append(batch_sim)
-                wandb.log({"Test Loss": batch_sim})
+                history["Test Loss"].append(best_epoch_loss)
+                wandb.log({"Test Loss": best_epoch_loss})
 
-                bar.set_postfix(Batch=step, Test_Loss=batch_sim)
+                bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
 
-        # Save the state
-        self.state.save_state(
-            self.best_path,
-            None,
+                # Save the state
+                if step % self.update_frequency == 0:
+                    self.save_state(
+                        best_epoch_loss,
+                        history,
+                        step + 1,
+                        Suffix.Test,
+                        self.test_dataloader.dataset,
+                    )
+
+        # Finally save the entire run results
+        self.save_state(
+            best_epoch_loss,
             history,
-            len(self.test_dataloader),
-            self.scheduler,
-            self.optimizer,
-            f"{self.model_name}_test_results.pkl",
+            step + 1,
+            Suffix.Test,
+            self.test_dataloader.dataset,
         )
 
         # Release resources
@@ -127,7 +131,7 @@ class GenerationTrainer(TorchBase):
         # this is done for every iteration
         self.state.history["embeddings"].append(embeddings)
 
-    def save_state(self, best_epoch_loss, history, epoch):
+    def save_state(self, best_epoch_loss, history, epoch, suffix, dataset):
         self.state.save_state(
             self.best_path,
             best_epoch_loss,
@@ -135,4 +139,6 @@ class GenerationTrainer(TorchBase):
             epoch,
             self.scheduler,
             self.optimizer,
+            dataset,
+            file_name=f"{suffix}_state_dict.pkl",
         )

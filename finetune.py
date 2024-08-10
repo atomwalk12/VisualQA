@@ -8,6 +8,7 @@ from lib.trainers.generation_trainer import GenerationTrainer
 from lib.types import (
     SAVE_PATHS,
     ModelTypes,
+    Suffix,
     TrainingParameters,
     VQAParameters,
     DatasetTypes,
@@ -41,7 +42,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--train-split",
         type=str,
         help="Number of training examples to generate.",
-        default="train",
+        default=Suffix.Train,
     )
 
     # Same semnatics as in --train
@@ -49,7 +50,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--val-split",
         type=str,
         help="Number of validation examples to generate.",
-        default="val",
+        default=Suffix.Val,
     )
 
     # Whether to use the lightning trainer or not
