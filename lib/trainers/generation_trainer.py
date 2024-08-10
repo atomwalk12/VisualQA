@@ -24,7 +24,7 @@ class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
 
-        self.update_frequency = 25
+        self.update_frequency = 64
 
     def get_repository(self):
         return Repositories.VQAGeneration

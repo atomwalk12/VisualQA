@@ -28,7 +28,8 @@ class ModelTypes(StrEnum):
 
 class HFRepos(StrEnum):
     BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
-    
+
+
 class Suffix(StrEnum):
     Test = "test"
     Train = "train"
@@ -129,7 +130,7 @@ class State:
         logger.info(f"Results were saved to {best_path}/{file_name}")
 
     @classmethod
-    def load_state(self, path, suffix = Suffix.Train | Suffix.Test):
+    def load_state(self, path, suffix: Suffix):
         try:
             return pd.read_pickle(f"{path}/{suffix}_state_dict.pkl")
         except FileNotFoundError:
@@ -189,32 +190,13 @@ class TrainingParameters:
 
     def fetch_scheduler(self, optimizer, t_max=500, min_lr=1e-6, T_0=15):
         if self.scheduler_name == "CosineAnnealingLR":
-            scheduler = lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=t_max, eta_min=min_lr
-            )
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=t_max, eta_min=min_lr)
         elif self.scheduler_name == "CosineAnnealingWarmRestarts":
-            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
-                optimizer, T_0=T_0, eta_min=min_lr
-            )
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=T_0, eta_min=min_lr)
         elif self.scheduler_name is None:
             return None
 
         return scheduler
-
-
-@dataclass
-class LightningConfig:
-    accumulate_grad_batches = 8
-    gradient_clip_val = 1.0
-    max_epochs = 200
-    check_val_every_n_epochs = 5
-
-    def __init__(self, limit_train_batches=None, limit_val_batches=None):
-        self.limit_train_batches = (
-            limit_train_batches if limit_train_batches is None else 1.0
-        )
-        self.limit_val_batches = limit_val_batches if limit_val_batches is None else 1.0
-
 
 class BertScoreMetric(Metric):
     def __init__(self) -> None:

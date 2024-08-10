@@ -82,8 +82,6 @@ class TorchBase(ABC):
         if not self.resume:
             self.state = State()
         else:
-            # Somewhat fragile to test against this variable but is cleaner than
-            # introducing other state.
             suffix = Suffix.Train if config.is_trainable else Suffix.Test
 
             if suffix == Suffix.Train:

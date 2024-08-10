@@ -62,7 +62,7 @@
                 "train[:85]",
                 "--val-split",
                 "train[:80]",
-                // "--resume-training"
+                "--resume-training"
             ]
         },
         {

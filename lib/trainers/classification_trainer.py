@@ -26,7 +26,7 @@ class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
 
-        self.update_frequency = 25
+        self.update_frequency = 64
 
     def get_repository(self):
         if self.model_name == ModelTypes.BLIP2BaseClassifier:
