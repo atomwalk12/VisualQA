@@ -103,7 +103,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
             )
             raw_dataset = ds[split if split == "train" else "test"]
 
-            assert len(raw_dataset) == size
+            assert len(raw_dataset) == end - start
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
