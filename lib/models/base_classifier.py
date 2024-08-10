@@ -81,5 +81,5 @@ class Blip2(PreTrainedModel):
 
         return model
 
-    def get_embeddings(self):
+    def get_state(self):
         return self.embeddings

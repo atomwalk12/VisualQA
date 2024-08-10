@@ -26,7 +26,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
     _dataset: Dataset = None
 
     def __init__(self, params: VQAParameters):
-        super().__init__()
+        super().__init__(params.split)
 
         assert params.processor is not None
 

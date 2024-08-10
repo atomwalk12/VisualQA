@@ -167,8 +167,6 @@ class ClassificationTrainer(TorchBase):
         assert isinstance(self.model, Blip2)
 
         # retrieve model's state and save to file
-        model_state = self.model.get_embeddings()
-        history["embeddings"] = model_state
         self.state.save_state(
             self.best_path,
             best_epoch_loss,
@@ -177,5 +175,5 @@ class ClassificationTrainer(TorchBase):
             self.scheduler,
             self.optimizer,
             dataset,
-            file_name=f"{suffix}_state_dict.pkl",
+            file_name=f"{suffix}_state_dict",
         )

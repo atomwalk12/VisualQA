@@ -110,7 +110,7 @@ class TorchBase(ABC):
                 shuffle=True,
                 worker_init_fn=EXPERIMENT.seed_worker,
                 generator=EXPERIMENT.get_generator(),
-                num_workers=12,
+                num_workers=params.num_train_workers,
             )
 
         if params.val_args is not None:
@@ -122,7 +122,7 @@ class TorchBase(ABC):
                 shuffle=False,
                 worker_init_fn=EXPERIMENT.seed_worker,
                 generator=EXPERIMENT.get_generator(),
-                num_workers=8,
+                num_workers=params.num_val_workers,
             )
 
         if params.test_args is not None:
@@ -134,7 +134,7 @@ class TorchBase(ABC):
                 shuffle=False,
                 worker_init_fn=EXPERIMENT.seed_worker,
                 generator=EXPERIMENT.get_generator(),
-                num_workers=8,
+                num_workers=params.num_test_workers,
             )
 
         return model, processor
@@ -201,7 +201,6 @@ class TorchBase(ABC):
         logger.info(f"Best Loss: {best_epoch_loss:.4f}")
 
         # Load the best model
-
         model, processor = self.load_from_checkpoint(is_trainable=True)
         self.push_to_hub(model, processor)
         print()
@@ -241,7 +240,6 @@ class TorchBase(ABC):
                 labels=labels,
                 attention_mask=attention_mask,
             )
-            self.update_state_with_embeddings(outputs)
 
             # Now update the loss
             loss = outputs.loss

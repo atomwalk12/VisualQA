@@ -71,9 +71,11 @@ class SAVE_PATHS(StrEnum):
 class CustomDataset(Dataset, ABC):
     ready_for_training: bool
     answer_space: int
+    split: str
 
-    def __init__(self) -> None:
+    def __init__(self, split) -> None:
         super().__init__()
+        self.split = split
 
     @abstractmethod
     def save():
@@ -104,7 +106,6 @@ class State:
     current_epoch: int = 1
     scheduler_state_dict = None
     optimizer_state_dict = None
-    dataset: CustomDataset = None
 
     def save_state(
         self,
@@ -122,9 +123,8 @@ class State:
         self.current_epoch = epoch
         self.scheduler_state_dict = scheduler.state_dict()
         self.optimizer_state_dict = optimizer.state_dict()
-        self.dataset = dataset
 
-        with open(f"{best_path}/{file_name}", "wb") as file:
+        with open(f"{best_path}/{file_name}_{dataset.split}.pkl", "wb") as file:
             pickle.dump(self, file)
 
         logger.info(f"Results were saved to {best_path}/{file_name}")
@@ -158,6 +158,9 @@ class TrainingParameters:
     test_args: VQAParameters
     wandb_project: str = "ComputerVision"
     shuffle_train: bool = True
+    num_train_workers: int = 12
+    num_val_workers: int = 8
+    num_test_workers: int = 8
 
     def __repr__(self):
         return (

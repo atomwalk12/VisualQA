@@ -140,5 +140,5 @@ class GenerationTrainer(TorchBase):
             self.scheduler,
             self.optimizer,
             dataset,
-            file_name=f"{suffix}_state_dict.pkl",
+            file_name=f"{suffix}_state_dict",
         )

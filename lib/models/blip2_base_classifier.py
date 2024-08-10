@@ -58,11 +58,6 @@ class Blip2BaseClassifier(Blip2):
         text_features = self.get_text_embedding(input_ids)
         features = torch.cat((language_features, text_features), dim=1)
 
-        if self.model.training:
-            self.embeddings["language_features"].append(language_features)
-            self.embeddings["qformer_features"].append(qformer_features)
-            self.embeddings["text_features"].append(text_features)
-            self.embeddings["combined_language_text_features"].append(features)
 
         # Classification
         interm_output = self.interm_layer(features)
