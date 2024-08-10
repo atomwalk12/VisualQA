@@ -1,5 +1,7 @@
+from collections import defaultdict
+from dataclasses import field
 import os
-
+from collections import defaultdict
 import torch
 import torch.utils.checkpoint
 from easy_vqa import get_answers
@@ -32,7 +34,7 @@ class Blip2(PreTrainedModel):
 
     def __init__(self, config: Blip2ClassifierConfig):
         super().__init__(config)
-        self.embeddings: dict[list] = dict(list)
+        self.embeddings: defaultdict[str, list] = defaultdict(list)
 
     def save_pretrained(self, save_directory, **kwargs):
         output_path = f"{save_directory}"

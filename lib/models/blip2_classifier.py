@@ -60,7 +60,8 @@ class Blip2Classifier(Blip2):
 
         # the total number of features is 24576
         features = outputs.qformer_outputs.last_hidden_state.view(batch_size, -1)
-        self.embeddings["qformer_last_hidden_state"].append(features)
+        if self.model.training:
+            self.embeddings["qformer_last_hidden_state"].append(features)
 
         # Classification
         interm_output = self.interm_layer(features)

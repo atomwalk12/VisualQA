@@ -54,15 +54,15 @@ class Blip2BaseClassifier(Blip2):
         # Extract image features
         language_features, qformer_features = self.get_img_embedding(pixel_values)
 
-        self.embeddings["language_features"].append(language_features)
-        self.embeddings["qformer_features"].append(qformer_features)
-
         # the total number of features is 24576
         text_features = self.get_text_embedding(input_ids)
         features = torch.cat((language_features, text_features), dim=1)
 
-        self.embeddings["text_features"].append(text_features)
-        self.embeddings["combined_language_text_features"].append(features)
+        if self.model.training:
+            self.embeddings["language_features"].append(language_features)
+            self.embeddings["qformer_features"].append(qformer_features)
+            self.embeddings["text_features"].append(text_features)
+            self.embeddings["combined_language_text_features"].append(features)
 
         # Classification
         interm_output = self.interm_layer(features)

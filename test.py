@@ -3,12 +3,12 @@ import logging
 import warnings
 
 
+
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
 from lib.types import ModelTypes, TrainingParameters, VQAParameters
 from lib.trainers.base_trainer import TorchBase
-from lib.utils import set_seed
-
+from lib.utils import EXPERIMENT
 logging.basicConfig(level=logging.INFO)
 
 
@@ -42,6 +42,9 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def evaluate_model(args):
+    if isinstance(args.seed, int):
+        EXPERIMENT.set_seed(args.seed).apply_seed()
+    
     test_args = VQAParameters(
         split=args.test_split, is_testing=True, use_stratified_split=True
     )
@@ -72,7 +75,5 @@ if __name__ == "__main__":
 
     parser = get_parser()
     args = parser.parse_args()
-
-    set_seed(args.seed)
 
     evaluate_model(args)

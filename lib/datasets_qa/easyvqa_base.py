@@ -14,7 +14,7 @@ from easy_vqa import (
     get_train_questions,
 )
 from PIL import Image
-
+from ..utils import EXPERIMENT
 from ..types import CustomDataset, VQAParameters
 from ..utils import ROOT_DATA_DIR, parse_split_slicer
 
@@ -59,9 +59,6 @@ class EasyVQADatasetBase(CustomDataset, ABC):
 
         self.is_testing = params.is_testing
 
-    def shuffle(self, seed):
-        self._dataset = self._dataset.shuffle(seed)
-
     def initialize_stratified_raw(self):
         """Method to initialize the dataset."""
 
@@ -99,7 +96,9 @@ class EasyVQADatasetBase(CustomDataset, ABC):
                 size = len(ds) - (end - start)
 
             ds = ds.class_encode_column("stratify_column").train_test_split(
-                test_size=size, stratify_by_column="stratify_column", seed=1220
+                test_size=size,
+                stratify_by_column="stratify_column",
+                seed=EXPERIMENT.get_seed(),
             )
             raw_dataset = ds[split if split == "train" else "test"]
 
@@ -131,7 +130,9 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         split, start, end = parse_split_slicer(self.split)
         if self.split.startswith("train") or self.split.startswith("val"):
             target = "test" if split.startswith("val") else split
-            raw_dataset = raw_dataset.train_test_split(test_size=0.25, seed=2024)[target]
+            raw_dataset = raw_dataset.train_test_split(
+                test_size=0.25, seed=EXPERIMENT.get_seed()
+            )[target]
 
         if start is not None or end is not None:
             raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))

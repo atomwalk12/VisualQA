@@ -6,7 +6,7 @@ import warnings
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
 from lib.types import SAVE_PATHS, ModelTypes, TrainingParameters, VQAParameters
-from lib.utils import set_seed
+from lib.utils import EXPERIMENT
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--seed",
         type=int,
         help="Whether to make the results reproducible by setting a given seed.",
-        default=42,
+        default=2024,
     )
 
     parser.add_argument(
@@ -75,7 +75,7 @@ def get_parser() -> argparse.ArgumentParser:
 
 def main(args: argparse.Namespace):
     if isinstance(args.seed, int):
-        set_seed(args.seed)
+        EXPERIMENT.set_seed(args.seed).apply_seed()
 
     logger.info("Fine tuning using Torch Trainer")
     train_args = VQAParameters(split=args.train_split, use_stratified_split=True)

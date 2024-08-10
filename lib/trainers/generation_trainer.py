@@ -123,5 +123,16 @@ class GenerationTrainer(TorchBase):
     def get_dataset(self, args):
         return EasyVQAGeneration(args)
 
-    def update_state_with_embeddings(self):
-        return None
+    def update_state_with_embeddings(self, embeddings):
+        # this is done for every iteration
+        self.state.history["embeddings"].append(embeddings)
+
+    def save_state(self, best_epoch_loss, history, epoch):
+        self.state.save_state(
+            self.best_path,
+            best_epoch_loss,
+            history,
+            epoch,
+            self.scheduler,
+            self.optimizer,
+        )

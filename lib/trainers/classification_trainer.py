@@ -156,9 +156,22 @@ class ClassificationTrainer(TorchBase):
     def get_dataset(self, args):
         return EasyVQAClassification(args)
 
-    def update_state_with_embeddings(self):
-        # This should always be true, but checking for intellisense completion
+    def update_state_with_embeddings(self, embeddings):
+        # This is done automatically within the model's state. Nothing to do.
+        pass
+
+    def save_state(self, best_epoch_loss, history, epoch):
+        # This should always be true, but checking for intellisense completion.
         assert isinstance(self.model, Blip2)
 
-        state = self.model.get_embeddings()
-        self.state.history["embeddings"] = state
+        # retrieve model's state and save to file
+        model_state = self.model.get_embeddings()
+        history["embeddings"] = model_state
+        self.state.save_state(
+            self.best_path,
+            best_epoch_loss,
+            history,
+            epoch,
+            self.scheduler,
+            self.optimizer,
+        )

@@ -214,9 +214,6 @@ class CustomDataset(Dataset, ABC):
     def load():
         pass
 
-    @abstractmethod
-    def shuffle(seed):
-        pass
 
 
 class BertScoreMetric(Metric):

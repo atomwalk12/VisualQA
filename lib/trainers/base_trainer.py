@@ -14,10 +14,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import PreTrainedModel
 
+from ..utils import EXPERIMENT
 import wandb
 
 from ..types import State, TrainingParameters, VQAParameters
-from ..utils import ROOT_DATA_DIR, format_time, get_generator, seed_worker
+from ..utils import ROOT_DATA_DIR, format_time
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +101,8 @@ class TorchBase(ABC):
                 train_dataset,
                 batch_size=params.train_batch_size,
                 shuffle=True,
-                worker_init_fn=seed_worker,
-                generator=get_generator(),
+                worker_init_fn=EXPERIMENT.seed_worker,
+                generator=EXPERIMENT.get_generator(),
                 num_workers=12,
             )
 
@@ -112,8 +113,8 @@ class TorchBase(ABC):
                 val_dataset,
                 batch_size=params.val_batch_size,
                 shuffle=False,
-                worker_init_fn=seed_worker,
-                generator=get_generator(),
+                worker_init_fn=EXPERIMENT.seed_worker,
+                generator=EXPERIMENT.get_generator(),
                 num_workers=8,
             )
 
@@ -124,8 +125,8 @@ class TorchBase(ABC):
                 test_dataset,
                 batch_size=params.test_batch_size,
                 shuffle=False,
-                worker_init_fn=seed_worker,
-                generator=get_generator(),
+                worker_init_fn=EXPERIMENT.seed_worker,
+                generator=EXPERIMENT.get_generator(),
                 num_workers=8,
             )
 
@@ -176,14 +177,8 @@ class TorchBase(ABC):
                 # Save a model file from the current directory
                 print(f"Model Saved{reset} --> {self.best_path}")
 
-            self.state.save_state(
-                self.best_path,
-                best_epoch_loss,
-                history,
-                epoch + 1,
-                self.scheduler,
-                self.optimizer,
-            )
+            # Saving the epoch which is supposed to be the next
+            self.save_state(best_epoch_loss, history, epoch + 1)
 
             print()
 
@@ -237,6 +232,7 @@ class TorchBase(ABC):
                 labels=labels,
                 attention_mask=attention_mask,
             )
+            self.update_state_with_embeddings(outputs)
 
             # Now update the loss
             loss = outputs.loss
@@ -365,6 +361,10 @@ class TorchBase(ABC):
         pass
 
     @abstractmethod
-    def update_state_with_embeddings(self):
+    def update_state_with_embeddings(self, embeddings=None):
         # When training the model for generation, there are no embeddings to save
+        pass
+
+    @abstractmethod
+    def save_state(self, best_epoch_loss, history, epoch):
         pass
