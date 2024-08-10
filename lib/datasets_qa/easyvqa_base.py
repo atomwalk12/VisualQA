@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 class EasyVQADatasetBase(CustomDataset, ABC):
     raw_dataset: Dataset = None
     _dataset: Dataset = None
-    ready_for_training: bool = False
 
     def __init__(self, params: VQAParameters):
         super().__init__()
@@ -58,6 +57,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
             self.initialize_for_training()
 
         self.is_testing = params.is_testing
+        self.use_raw_dataset = False
 
     def initialize_stratified_raw(self):
         """Method to initialize the dataset."""
@@ -145,12 +145,15 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         return self._dataset
 
     def __len__(self) -> int:
-        if self.ready_for_training:
-            return len(self._dataset)
-        else:
+        if self.use_raw_dataset:
             return len(self.raw_dataset)
+        else:
+            return len(self._dataset)
 
     def __getitem__(self, idx):
+        if self.use_raw_dataset:
+            return self.raw_dataset[idx]
+
         # Encode the dataset item
         item = self.dataset[idx]
 
@@ -182,7 +185,6 @@ class EasyVQADatasetBase(CustomDataset, ABC):
             lambda item: self._prepare_for_training(item),
             remove_columns=columns_to_remove,
         )
-        self.ready_for_training = True
 
     def save(self):
         """Utility used for saving the dataset at the given output path.
@@ -209,7 +211,6 @@ class EasyVQADatasetBase(CustomDataset, ABC):
 
     def load(self):
         """Utility to load the pickle from a given path."""
-        assert not self.ready_for_training
         complete_path = self.get_make_complete_path()
 
         try:

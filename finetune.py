@@ -63,6 +63,13 @@ def get_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--num-epochs",
+        type=int,
+        help="The number of epochs to train for.",
+        default=120,
+    )
+
+    parser.add_argument(
         "--resume-training",
         help="Whether to continue training from checkpoint",
         action=argparse.BooleanOptionalAction,
@@ -80,6 +87,7 @@ def main(args: argparse.Namespace):
     train_args = VQAParameters(split=args.train_split, use_stratified_split=True)
     val_args = VQAParameters(split=args.val_split, use_stratified_split=True)
     parameters = TrainingParameters(
+        num_epochs=args.num_epochs,
         resume=args.resume_training,
         model_name=args.model,
         is_trainable=True,
@@ -90,10 +98,7 @@ def main(args: argparse.Namespace):
 
     if args.model == ModelTypes.BLIP2Generator:
         module = GenerationTrainer(parameters)
-    elif (
-        args.model == ModelTypes.BLIP2Classifier
-        or args.model == ModelTypes.BLIP2BaseClassifier
-    ):
+    elif args.model == ModelTypes.BLIP2Classifier or args.model == ModelTypes.BLIP2BaseClassifier:
         module = ClassificationTrainer(parameters)
 
     model, history = module.finetune()
