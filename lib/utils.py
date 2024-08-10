@@ -10,9 +10,11 @@ from enum import StrEnum
 import numpy
 import random
 
+from lib.experiments import Reproducible
+
+EXPERIMENT: Reproducible = Reproducible()
 ROOT_DATA_DIR = "data/"
 MODELS_DIR = f"{ROOT_DATA_DIR}/models/"
-
 
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +42,7 @@ def parse_split_slicer(split: str):
 def make_dir(path):
     Path(path).mkdir(parents=True, exist_ok=True)
 
+
 def format_time(seconds):
     """
     Format time in seconds to hours, minutes, and seconds.
@@ -48,31 +51,3 @@ def format_time(seconds):
     minutes = int((seconds % 3600) // 60)
     seconds = int((seconds % 3600) % 60)
     return f"{hours:.0f}h {minutes:.0f}m {seconds:.0f}s"
-
-
-def set_seed(seed):
-    """Sets a seed for the run in order to make the results reproducible."""
-    logger.info(f"Setting {seed=}")
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    np.random.seed(seed)
-
-    # whether to use the torch autotuner and find the best algorithm for current hardware
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-
-    torch.cuda.manual_seed(seed)
-    torch.manual_seed(seed)
-
-
-
-def seed_worker(seed_worker):
-    worker_seed = torch.initial_seed() % 2**32
-    numpy.random.seed(worker_seed)
-    random.seed(worker_seed)
-
-
-def get_generator():
-    g = torch.Generator()
-    g.manual_seed(0)
-    return g
