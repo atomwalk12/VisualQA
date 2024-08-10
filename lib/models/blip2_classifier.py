@@ -19,7 +19,7 @@ class Blip2Classifier(Blip2):
     config_class = Blip2ClassifierConfig
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):
-        super(Blip2Classifier, self).__init__(config)
+        super().__init__(config)
         logger.info(f"{config.interm_dim=}")
 
         self.config = config
@@ -60,6 +60,7 @@ class Blip2Classifier(Blip2):
 
         # the total number of features is 24576
         features = outputs.qformer_outputs.last_hidden_state.view(batch_size, -1)
+        self.embeddings["qformer_last_hidden_state"].append(features)
 
         # Classification
         interm_output = self.interm_layer(features)

@@ -363,3 +363,8 @@ class TorchBase(ABC):
     @abstractmethod
     def get_dataset(self, args: VQAParameters):
         pass
+
+    @abstractmethod
+    def update_state_with_embeddings(self):
+        # When training the model for generation, there are no embeddings to save
+        pass

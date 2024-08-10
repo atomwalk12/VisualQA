@@ -122,3 +122,6 @@ class GenerationTrainer(TorchBase):
 
     def get_dataset(self, args):
         return EasyVQAGeneration(args)
+
+    def update_state_with_embeddings(self):
+        return None

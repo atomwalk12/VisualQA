@@ -14,7 +14,7 @@ from .base_trainer import TorchBase
 from ..representations import SAVE_PATHS, ModelFactory, ModelTypes
 
 from ..datasets_qa.easyvqa_classification import EasyVQAClassification
-from ..models.base_classifier import Blip2ClassifierConfig
+from ..models.base_classifier import Blip2, Blip2ClassifierConfig
 from ..models.blip2_base_classifier import Blip2BaseClassifier
 from ..models.blip2_classifier import Blip2Classifier
 from ..types import TrainingParameters
@@ -155,3 +155,10 @@ class ClassificationTrainer(TorchBase):
 
     def get_dataset(self, args):
         return EasyVQAClassification(args)
+
+    def update_state_with_embeddings(self):
+        # This should always be true, but checking for intellisense completion
+        assert isinstance(self.model, Blip2)
+
+        state = self.model.get_embeddings()
+        self.state.history["embeddings"] = state

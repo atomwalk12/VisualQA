@@ -50,7 +50,7 @@ class ModelFactory:
         return list(set(layer_names))
 
     @staticmethod
-    def create_bnb_config() -> BitsAndBytesConfig:
+    def bnb_config() -> BitsAndBytesConfig:
         """Create a BitsAndBytesConfig for quantization."""
         return BitsAndBytesConfig(
             load_in_4bit=True,
@@ -59,7 +59,7 @@ class ModelFactory:
         )
 
     @staticmethod
-    def create_lora_config() -> LoraConfig:
+    def lora_config() -> LoraConfig:
         """Create a LoraConfig for PEFT."""
         return LoraConfig(
             r=8,
@@ -70,7 +70,7 @@ class ModelFactory:
         )
 
     def get_models(
-        model_name: ModelTypes, apply_lora: bool
+        model_name: ModelTypes, apply_lora: bool, lora_config=None, bnb_config=None
     ) -> Tuple[AutoModel, AutoProcessor]:
         """
         Get the model and processor for a given model type.
@@ -95,13 +95,16 @@ class ModelFactory:
         # Load both the processor and model
         processor = processor_class.from_pretrained(repo_id)
 
-        bnb_config = ModelFactory.create_bnb_config()
+        bnb_config = ModelFactory.bnb_config() if bnb_config is None else bnb_config
+
         model = model_class.from_pretrained(
             repo_id, torch_dtype=torch.float16, quantization_config=bnb_config
         )
 
         if apply_lora:
-            lora_config = ModelFactory.create_lora_config()
+            lora_config = (
+                ModelFactory.lora_config() if lora_config is None else lora_config
+            )
 
             model = prepare_model_for_kbit_training(
                 model, use_gradient_checkpointing=True

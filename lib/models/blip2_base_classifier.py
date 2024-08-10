@@ -52,11 +52,17 @@ class Blip2BaseClassifier(Blip2):
         labels: Optional[torch.LongTensor] = None,
     ):
         # Extract image features
-        img_embeddings = self.get_img_embedding(pixel_values)
+        language_features, qformer_features = self.get_img_embedding(pixel_values)
+
+        self.embeddings["language_features"].append(language_features)
+        self.embeddings["qformer_features"].append(qformer_features)
 
         # the total number of features is 24576
-        text_embeddings = self.get_text_embedding(input_ids)
-        features = torch.cat((img_embeddings, text_embeddings), dim=1)
+        text_features = self.get_text_embedding(input_ids)
+        features = torch.cat((language_features, text_features), dim=1)
+
+        self.embeddings["text_features"].append(text_features)
+        self.embeddings["combined_language_text_features"].append(features)
 
         # Classification
         interm_output = self.interm_layer(features)
@@ -82,15 +88,15 @@ class Blip2BaseClassifier(Blip2):
 
         # pass images through the vision model and then the qformer to get query-conditional image features
         # tuple (last_hidden_state, pooler_output)
-        query_outputs = self.model.get_qformer_features(images)
-        query_output = query_outputs["pooler_output"]  # (batch_size, hidden_size)
+        qformer_features = self.model.get_qformer_features(images)
+        query_output = qformer_features["pooler_output"]  # (batch_size, hidden_size)
 
         # project query-conditional image features into language space
         # shape (batch_size, hidden_size)
-        image_features = self.model.language_projection(query_output)
+        language_projections = self.model.language_projection(query_output)
         # TODO[RV] image_features /= image_features.norm(dim=-1, keepdim=True)
 
-        return image_features
+        return language_projections, qformer_features
 
     def get_text_embedding(self, texts):
         """
@@ -98,7 +104,8 @@ class Blip2BaseClassifier(Blip2):
         texts is a list of strings to embed.
         """
 
-        text_outputs = self.model.get_text_features(texts, output_hidden_states=True)  # type: ignore
+        text_outputs = self.model.get_text_features(texts, output_hidden_states=True)
+
         # extract [CLS] embedding from last hidden state, shape (batch_size, hidden_size)
         text_features = text_outputs["hidden_states"][-1][:, 0, :]
 

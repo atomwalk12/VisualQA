@@ -32,6 +32,7 @@ class Blip2(PreTrainedModel):
 
     def __init__(self, config: Blip2ClassifierConfig):
         super().__init__(config)
+        self.embeddings: dict[list] = dict(list)
 
     def save_pretrained(self, save_directory, **kwargs):
         output_path = f"{save_directory}"
@@ -77,3 +78,6 @@ class Blip2(PreTrainedModel):
             model.interm_layer.load_state_dict(torch.load(additional_layer_path))
 
         return model
+
+    def get_embeddings(self):
+        return self.embeddings
