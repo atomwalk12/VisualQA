@@ -12,23 +12,6 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Data-processing",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "process.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2",
-                "--dataset",
-                "easy-vqa",
-                "--train-split",
-                "train[:100]",
-                "--val-split",
-                "val[:30]"
-            ]
-        },
-        {
             "name": "Fine-tune blip2 on easy-vqa dataset",
             "type": "debugpy",
             "request": "launch",
@@ -82,23 +65,6 @@
                 // "--resume-training"
             ]
         },
-        // {
-        //     "name": "Fine-tune, using pytorch, VILT (classification-task) on easy-vqa dataset",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "finetune.py",
-        //     "console": "integratedTerminal",
-        //     "args": [
-        //         "--model",
-        //         "vilt",
-        //         "--dataset",
-        //         "easy-vqa",
-        //         "--train-split",
-        //         "train[:350]",
-        //         "--val-split",
-        //         "val[:300]"
-        //     ]
-        // },
         {
             "name": "Test, blip2-generator on easy-vqa dataset",
             "type": "debugpy",
@@ -126,7 +92,7 @@
                 "--dataset",
                 "easy-vqa",
                 "--test-split",
-                "train[:30]",
+                "test[:30]",
             ]
         },
         {
@@ -141,7 +107,7 @@
                 "--dataset",
                 "easy-vqa",
                 "--test-split",
-                "train[:30]",
+                "test[:30]",
             ]
         },
         {

@@ -5,7 +5,13 @@ import warnings
 
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
-from lib.types import SAVE_PATHS, ModelTypes, TrainingParameters, VQAParameters
+from lib.types import (
+    SAVE_PATHS,
+    ModelTypes,
+    TrainingParameters,
+    VQAParameters,
+    DatasetTypes,
+)
 from lib.utils import EXPERIMENT
 
 logging.basicConfig(level=logging.DEBUG)
@@ -23,9 +29,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dataset",
-        choices=[
-            "easy-vqa",
-        ],
+        choices=[choice for choice in DatasetTypes],
         type=str,
         default="easy-vqa",
         help="The dataset to use",
@@ -49,12 +53,6 @@ def get_parser() -> argparse.ArgumentParser:
     )
 
     # Whether to use the lightning trainer or not
-    # TODO remove this part
-    parser.add_argument(
-        "--use-lightning",
-        action=argparse.BooleanOptionalAction,
-        help="Whether to use the Pytorch Lightning library to fine-tune.",
-    )
 
     parser.add_argument(
         "--seed",

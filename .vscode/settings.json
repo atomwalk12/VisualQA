@@ -16,7 +16,6 @@
         "PYTHONHASHSEED",
         "qlora",
         "tensorboard",
-        "vilt",
         "vinputs",
         "vlabels",
         "voutputs"

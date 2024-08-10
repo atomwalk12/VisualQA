@@ -32,7 +32,6 @@ class ModelTypes(StrEnum):
 
 class HFRepos(StrEnum):
     BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
-    VILT = "dandelin/vilt-b32-mlm"
 
 
 # Mapping from model types to repo IDs
@@ -40,7 +39,6 @@ MODEL_REPO_MAPPING = {
     ModelTypes.BLIP2Generator: HFRepos.BLIP2_OPT.value,
     ModelTypes.BLIP2Classifier: HFRepos.BLIP2_OPT.value,
     ModelTypes.BLIP2BaseClassifier: HFRepos.BLIP2_OPT.value,
-    # TODO[F] ModelTypes.VILT: HFRepos.VILT.value,
 }
 
 # Mapping from model types to model classes
@@ -48,7 +46,6 @@ MODEL_CLASS_MAPPING = {
     ModelTypes.BLIP2BaseClassifier: Blip2Model,
     ModelTypes.BLIP2Generator: Blip2ForConditionalGeneration,
     ModelTypes.BLIP2Classifier: Blip2ForConditionalGeneration,
-    # TODO[F] ModelTypes.VILT: ViltForQuestionAnswering,
 }
 
 PROCESSOR_CLASS_MAPPING = {
