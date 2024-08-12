@@ -10,14 +10,18 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import BitsAndBytesConfig
 from transformers.models.blip_2.modeling_blip_2 import Blip2ForConditionalGenerationModelOutput
-
+import torch
+import torch.nn.functional as F
+import numpy as np
+from nltk.translate.bleu_score import sentence_bleu
+from ..utils import MetricsAccumulator
 import wandb
 from config import Repositories
 
 from ..daquar.daquar_generation import DaquarGeneration
 from ..easy_vqa.easyvqa_generation import EasyVQAGeneration
 from ..representations import ModelFactory
-from ..types import SAVE_PATHS, DatasetTypes, TrainingParameters
+from ..types import SAVE_PATHS, DatasetTypes, Suffix, TrainingParameters
 from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
@@ -27,6 +31,7 @@ class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
         self.update_frequency = 64
+        self.metric_accumulator = MetricsAccumulator(self.processor.tokenizer)
 
     def get_repository(self):
         return Repositories.VQAGeneration
@@ -89,19 +94,19 @@ class GenerationTrainer(TorchBase):
                 running_similarity += max_similarity
                 dataset_size += 1
 
-                best_epoch_loss = running_similarity / dataset_size
+                similarity = running_similarity / dataset_size
 
-                history["Test Loss"].append(best_epoch_loss)
-                wandb.log({"Test Loss": best_epoch_loss})
+                history["Test Loss"].append(similarity)
+                wandb.log({"Test Loss": similarity})
 
-                bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
+                bar.set_postfix(Batch=step, Accuracy=similarity)
 
                 # Save the state
                 if step % self.update_frequency == 0:
-                    self.save_state(best_epoch_loss, history, step + 1, self.test_dataloader)
+                    self.save_trainer_state(similarity, history, step + 1, self.test_dataloader)
 
         # Finally save the entire run results
-        self.save_state(best_epoch_loss, history, step + 1, self.test_dataloader)
+        self.save_trainer_state(similarity, history, step + 1, self.test_dataloader)
 
         # Release resources
         gc.collect()
@@ -129,7 +134,7 @@ class GenerationTrainer(TorchBase):
         embeddings = {"pooler_output": embeddings.qformer_outputs.pooler_output.to("cpu")}
         self.state.history["embeddings"].append(embeddings)
 
-    def save_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
+    def save_trainer_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
         self.state.save_state(
             self.best_path, best_epoch_loss, history, epoch, self.scheduler, self.optimizer, dataloader.dataset
         )
@@ -153,10 +158,28 @@ class GenerationTrainer(TorchBase):
 
     def lora_config(self) -> LoraConfig:
         """Create a LoraConfig for PEFT."""
-        return LoraConfig(
-            r=16,
-            lora_alpha=16,
-            lora_dropout=0.1,
-            target_modules="all-linear",
-            init_lora_weights="gaussian",
-        )
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            return LoraConfig(
+                r=32,
+                lora_alpha=64,
+                lora_dropout=0.1,
+                target_modules="all-linear",
+                init_lora_weights="gaussian",
+            )
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            return LoraConfig(
+                r=8,
+                lora_alpha=16,
+                lora_dropout=0.1,
+                target_modules="all-linear",
+                init_lora_weights="gaussian",
+            )            
+
+    def on_batch_processed(self, outputs, labels):
+        training = Suffix.Train if self.model.training else Suffix.Val
+        metrics = self.metric_accumulator.get_metrics(outputs, labels, training)
+        wandb.log(metrics)
+
+    def on_best_epoch(self):
+        pass
+    

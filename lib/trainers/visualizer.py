@@ -16,20 +16,23 @@ from lib.daquar.daquar_visualization import \
     VisualizationDaquarGeneration
 from lib.easy_vqa.easyvqa_visualization import \
     VisualizationEasyVQAGeneration
+from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
 from lib.types import TrainingParameters
 from lib.utils import format_time
-
-from ..types import DatasetTypes
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+from lib.types import SAVE_PATHS, DatasetTypes, FileNames, ModelTypes, State
+from ..types import DatasetTypes, FileNames
+from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
 
 
-class Visualizer(GenerationTrainer):
+class VisualizeGenerator(GenerationTrainer):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
-        self.save_embeddings = True
-        self.file_name = "embeddings.pkl"
         self.blue = Fore.BLUE
 
     def generate_embeddings(self):
@@ -68,7 +71,7 @@ class Visualizer(GenerationTrainer):
         print(f"{self.blue}Generating embeddings completed in {format_time(time_elapsed)}")
         print()
 
-        self.state.save_embeddings(self.best_path, file_name=self.file_name)
+        self.state.save_state_to_file(self.best_path, file_name=FileNames.UMAPEmbedding.format(self.config.split))
 
         return self.state
 
@@ -110,3 +113,29 @@ class Visualizer(GenerationTrainer):
             return VisualizationEasyVQAGeneration(args)
         else:
             return VisualizationDaquarGeneration(args)
+
+class VisualizeClassifier(ClassificationTrainer):
+    def __init__(self, config: TrainingParameters):
+        super().__init__(config)
+
+    def confusion_matrix(self, matrix: State):
+        all_preds = matrix.history['confusion_predictions']
+        all_labels = matrix.history['confusion_labels']
+        answer_space = self.train_dataloader.dataset.answer_space
+        
+        # Compute confusion matrix
+        cm = confusion_matrix(all_labels, all_preds, labels=range(len(answer_space)))
+
+        # Plot the confusion matrix
+        fig = plt.figure(figsize=(20, 20))
+        sns.heatmap(cm, annot=False, cmap='Blues', xticklabels=answer_space, yticklabels=answer_space)
+        plt.xlabel('Predicted')
+        plt.ylabel('True')
+        plt.title('Confusion Matrix')
+        plt.show()
+        fig.savefig(f"{self.best_path}/{FileNames.ConfusionMatrixPDF.format(self.config.split)}")
+        
+    
+    def load_confusion_matrix(self, split):
+        state = State()
+        return state.load_state(self.best_path, FileNames.ConfusionMatrix.format(split))

@@ -60,13 +60,13 @@ class Blip2Classifier(Blip2):
         interm_output = self.interm_layer(features)
         logits = self.classifier(interm_output)
 
-        wandb.log({"Base Model Loss": outputs.loss.item()})
+        wandb.log({"Base Model Batch Loss": outputs.loss.item()})
         if labels is not None:
             loss = self.criterion(logits, labels)
             outputs.loss = loss
 
             logger.debug(f"Base model loss {outputs.loss} and classifier loss {loss}")
-            wandb.log({"Classifier Loss": loss.item()})
+            wandb.log({"Classifier Batch Loss": loss.item()})
 
         outputs.logits = logits
 

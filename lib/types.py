@@ -16,12 +16,27 @@ from transformers import Blip2ForConditionalGeneration, Blip2Model, Blip2Process
 logger = logging.getLogger(__name__)
 
 
+class FileNames(StrEnum):
+    UMAPEmbedding = "embeddings_{0}.pkl"
+    ConfusionMatrixPDF = "confusion_matrix_{0}.pdf"
+    UMAPClustering = "umap_{0}.pdf"
+    StateDictionary = "state_dict_{0}.pkl"
+    ConfusionMatrix = "confusion_matrix_{0}.pkl"
+
+
+class EvaluationMetrics(StrEnum):
+    ConfusionMatrix = "confusion-matrix"
+    UMAP = "umap"
+
+
 class DatasetTypes(StrEnum):
     EASY_VQA = "easy-vqa"
     DAQUAR = "daquar"
 
+
 class DatasetPath(StrEnum):
     DAQUAR = "data/daquar/dataset"
+
 
 class ModelTypes(StrEnum):
     BLIP2Generator = "blip2-generator"
@@ -72,6 +87,7 @@ class SAVE_PATHS(StrEnum):
         Path(SAVE_PATHS.BLIP2_Generator_DAQUAR).mkdir(parents=True, exist_ok=True)
         Path(SAVE_PATHS.BLIP2_Classifier_DAQUAR).mkdir(parents=True, exist_ok=True)
 
+
 class CustomDataset(Dataset, ABC):
     ready_for_training: bool
     answer_space: int
@@ -96,7 +112,7 @@ class CustomDataset(Dataset, ABC):
 
 class Metric:
     name: str
-    log_columns: []
+    log_columns = []
 
     @abstractmethod
     def compute(self, pred, references):
@@ -133,8 +149,8 @@ class State:
             pickle.dump(self, file)
 
         logger.info(f"Results were saved to {path}")
-        
-    def save_embeddings(
+
+    def save_state_to_file(
         self,
         best_path: str,
         file_name: str,
@@ -146,8 +162,8 @@ class State:
         logger.info(f"Results were saved to {path}")
 
     @classmethod
-    def load_state(self, path, dataset_name, filename: str):
-        path = f"{path}/{dataset_name}/{filename}"
+    def load_state(self, path, filename: str):
+        path = f"{path}/{filename}"
         try:
             return pd.read_pickle(path)
         except FileNotFoundError:
@@ -181,7 +197,7 @@ class TrainingParameters:
     use_wandb: bool = True
     split: str = None
     resume_state: bool = True
-    
+
     def __post_init__(self):
         if self.test_args is not None:
             self.split = self.test_args.split
@@ -226,6 +242,7 @@ class TrainingParameters:
             return None
 
         return scheduler
+
 
 class BertScoreMetric(Metric):
     def __init__(self) -> None:

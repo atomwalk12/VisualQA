@@ -5,9 +5,9 @@
 import argparse
 import logging
 
-from lib.trainers.visualizer import Visualizer
-from lib.types import SAVE_PATHS, DatasetTypes, ModelTypes, State, TrainingParameters, VQAParameters
+from lib.types import SAVE_PATHS, DatasetTypes, EvaluationMetrics, ModelTypes
 from lib.utils import EXPERIMENT
+from lib.visualization import show_confusion_matrix, show_umap_clustering
 
 logger = logging.getLogger(__name__)
 
@@ -31,44 +31,33 @@ def get_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--test-split",
+        "--split",
         type=str,
         required=True,
         help="The dataset to use",
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        required=False,
+        default=100,
+        help="The number of samples to show in the graph",
+    )
+    parser.add_argument(
+        "--metric",
+        choices=[choice for choice in EvaluationMetrics],
     )
     return parser
 
 
 def main(args):
-    train_args = VQAParameters(split=args.test_split, use_stratified_split=True)
+    # Set the seed
     EXPERIMENT.set_seed(2024).apply_seed()
-    state = State()
-    root = (
-        SAVE_PATHS.BLIP2_Generator_EasyVQA
-        if args.dataset == DatasetTypes.EASY_VQA
-        else SAVE_PATHS.BLIP2_Generator_DAQUAR
-    )
 
-    parameters = TrainingParameters(
-        dataset_name=DatasetTypes.DAQUAR,
-        resume_checkpoint=True,
-        resume_state=False,
-        model_name=ModelTypes.BLIP2Generator,
-        is_trainable=False,
-        train_args=train_args,
-        val_args=None,
-        test_args=None,
-        use_wandb=False,
-    )
-
-    visualizer = Visualizer(parameters)
-
-    try:
-        history = state.load_state(root, args.dataset, "embeddings.pkl")
-    except Exception:
-        history = visualizer.generate_embeddings()
-
-    visualizer.display(history, num_samples=100, filename="result_train[:1000].pdf")
+    if args.metric == EvaluationMetrics.UMAP:
+        show_umap_clustering(args.split, args.dataset, num_samples=args.num_samples)
+    elif args.metric == EvaluationMetrics.ConfusionMatrix:
+        show_confusion_matrix(args.split, args.dataset)
 
 
 if __name__ == "__main__":

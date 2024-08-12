@@ -3,6 +3,9 @@ from PIL.Image import Image
 import matplotlib.pyplot as plt
 import numpy as np
 
+from lib.trainers.visualizer import VisualizeGenerator, VisualizeClassifier
+from lib.types import SAVE_PATHS, DatasetTypes, FileNames, ModelTypes, State, Suffix, TrainingParameters, VQAParameters
+
 
 def show_images_with_captions(images_or_paths: List[Image] | List[str], captions: List[str], cols=3):
     """Used to display the images given as input together with the corresponding captions.
@@ -44,3 +47,58 @@ def show_images_with_captions(images_or_paths: List[Image] | List[str], captions
     # Adjust layout and show the plot
     plt.tight_layout()
     plt.show()
+
+def show_umap_clustering(split, dataset, num_samples=100):
+    assert split.startswith(Suffix.Test) or split.startswith(Suffix.Val)
+    
+    # Prepare the parameters
+    train_args = VQAParameters(split=split, use_stratified_split=True)
+    state = State()
+    root = (
+        SAVE_PATHS.BLIP2_Generator_EasyVQA
+        if dataset == DatasetTypes.EASY_VQA
+        else SAVE_PATHS.BLIP2_Generator_DAQUAR
+    )
+
+    parameters = TrainingParameters(
+        dataset_name=dataset,
+        resume_checkpoint=True,
+        resume_state=False,
+        model_name=ModelTypes.BLIP2Generator,
+        is_trainable=False,
+        train_args=train_args,
+        val_args=None,
+        test_args=None,
+        use_wandb=False,
+    )
+
+    visualizer = VisualizeGenerator(parameters)
+
+    try:
+        history = state.load_state(root, FileNames.UMAPEmbedding.format(split))
+    except Exception:
+        history = visualizer.generate_embeddings()
+
+    visualizer.display(history, num_samples=num_samples, filename=FileNames.UMAPClustering.format(split))
+
+
+def show_confusion_matrix(split, dataset):  
+    args = VQAParameters(split=split, use_stratified_split=True)
+      
+    parameters = TrainingParameters(
+        dataset_name=dataset,
+        resume_checkpoint=True,
+        resume_state=True,
+        model_name=ModelTypes.BLIP2Classifier,
+        is_trainable=False,
+        train_args=args,
+        val_args=None,
+        test_args=None,
+        use_wandb=False,
+        split=split
+    )
+    
+    visualizer = VisualizeClassifier(parameters)
+    
+    confusion_matrix = visualizer.load_confusion_matrix(split)
+    visualizer.confusion_matrix(confusion_matrix)

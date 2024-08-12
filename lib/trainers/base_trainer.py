@@ -16,7 +16,7 @@ from transformers import PreTrainedModel
 
 import wandb
 
-from ..types import State, TrainingParameters, VQAParameters
+from ..types import FileNames, State, TrainingParameters, VQAParameters
 from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ class TorchBase(ABC):
         if not config.resume_state:
             self.state = State()
         else:
-            self.state = State.load_state(self.best_path, self.dataset_name, f"state_dict_{config.split}.pkl")
+            self.state = State.load_state(self.best_path, FileNames.StateDictionary.format(config.split))
             self.optimizer.load_state_dict(self.state.optimizer_state_dict)
             self.scheduler.load_state_dict(self.state.scheduler_state_dict)
 
@@ -164,11 +164,11 @@ class TorchBase(ABC):
             val_loss = self.valid_one_epoch(epoch=epoch)
 
             # Log the metrics
-            history["Train Loss"].append(train_loss)
-            history["Valid Loss"].append(val_loss)
+            history["Epoch Train Loss"].append(train_loss)
+            history["Epoch Valid Loss"].append(val_loss)
 
-            wandb.log({"Train Loss": train_loss})
-            wandb.log({"Valid Loss": val_loss})
+            wandb.log({"Epoch Train Loss": train_loss})
+            wandb.log({"Epoch Valid Loss": val_loss})
 
             # Save the best result
             if val_loss <= best_epoch_loss:
@@ -184,6 +184,7 @@ class TorchBase(ABC):
 
                 # Save the best model
                 logger.info(f"Saved model {self.best_path} --> {best_epoch_loss:.4f}")
+                self.on_best_epoch()
 
                 # Save a model file from the current directory
                 print(f"Model Saved{reset} --> {self.best_path}")
@@ -191,7 +192,7 @@ class TorchBase(ABC):
                 logger.info(f"{val_loss=}")
 
             # Saving the epoch which is supposed to be the next
-            self.save_state(
+            self.save_trainer_state(
                 best_epoch_loss,
                 history,
                 epoch + 1,
@@ -248,8 +249,11 @@ class TorchBase(ABC):
                 attention_mask=attention_mask,
             )
             if self.save_embeddings:
+                assert 3 == 4
                 self.update_state_with_embeddings(outputs)
-
+            
+            self.on_batch_processed(outputs, labels)
+            
             # Now update the loss
             loss = outputs.loss
             loss = loss / n_accumulate
@@ -305,6 +309,8 @@ class TorchBase(ABC):
                     attention_mask=attention_mask,
                 )
                 loss = outputs.loss
+                
+                self.on_batch_processed(outputs, labels)
 
                 # Accumulate the loss across multiple batches
                 running_loss += loss.item() * batch_size
@@ -374,7 +380,7 @@ class TorchBase(ABC):
         pass
 
     @abstractmethod
-    def save_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
+    def save_trainer_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
         pass
 
     @abstractmethod
@@ -383,4 +389,12 @@ class TorchBase(ABC):
 
     @abstractmethod
     def lora_config(self):
+        pass
+
+    @abstractmethod
+    def on_batch_processed(self, preds, targets):
+        pass
+    
+    @abstractmethod
+    def on_best_epoch(self):
         pass

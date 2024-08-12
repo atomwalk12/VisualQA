@@ -11,13 +11,13 @@ from transformers import BitsAndBytesConfig
 import wandb
 from config import Repositories
 
-from ..datasets_qa.daquar.daquar_classification import DaquarClassification
-from ..datasets_qa.easyvqa_classification import EasyVQAClassification
+from ..daquar.daquar_classification import DaquarClassification
+from ..easy_vqa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2, Blip2ClassifierConfig
 from ..models.blip2_base_classifier import Blip2BaseClassifier
 from ..models.blip2_classifier import Blip2Classifier
 from ..representations import ModelFactory, ModelTypes
-from ..types import SAVE_PATHS, DatasetTypes, TrainingParameters
+from ..types import SAVE_PATHS, DatasetTypes, FileNames, TrainingParameters
 from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,6 @@ class ClassificationTrainer(TorchBase):
             raise KeyError()
 
         return model, processor
-
 
     def bootstrap_model(self):
         model_name = self.model_name
@@ -129,7 +128,7 @@ class ClassificationTrainer(TorchBase):
 
                 # Save the state
                 if step % self.update_frequency == 0:
-                    self.save_state(
+                    self.save_trainer_state(
                         best_epoch_loss,
                         history,
                         step + 1,
@@ -137,7 +136,7 @@ class ClassificationTrainer(TorchBase):
                     )
 
         # Save the entire results
-        self.save_state(best_epoch_loss, history, step + 1, self.test_dataloader)
+        self.save_trainer_state(best_epoch_loss, history, step + 1, self.test_dataloader)
 
         # Release resources
         gc.collect()
@@ -164,10 +163,11 @@ class ClassificationTrainer(TorchBase):
         # This is done automatically within the model's state. Nothing to do.
         pass
 
-    def save_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):  # noqa: F821
+    def save_trainer_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):  # noqa: F821
         # This should always be true, but checking for intellisense completion.
         assert isinstance(self.model, Blip2)
         if self.save_embeddings:
+            assert 3 == 4
             embeddings = self.model.get_state()
             history["embeddings"] = embeddings
 
@@ -190,15 +190,49 @@ class ClassificationTrainer(TorchBase):
         return BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=torch.float32,
         )
 
     def lora_config(self) -> LoraConfig:
         """Create a LoraConfig for PEFT."""
-        return LoraConfig(
-            r=8,
-            lora_alpha=8,
-            lora_dropout=0.1,
-            target_modules="all-linear",
-            init_lora_weights="gaussian",
-        )
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            return LoraConfig(
+                r=32,
+                lora_alpha=64,
+                lora_dropout=0.1,
+                target_modules="all-linear",
+                init_lora_weights="gaussian",
+            )
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            return LoraConfig(
+                r=8,
+                lora_alpha=16,
+                lora_dropout=0.1,
+                target_modules="all-linear",
+                init_lora_weights="gaussian",
+            )
+
+    def on_batch_processed(self, preds, targets):
+        # Get the predicted class with the highest probability
+        prediction = torch.argmax(preds.logits, dim=1)
+
+        for pred, label in zip(prediction, targets):
+            # Check if the predicted class is one of the correct classes
+            if label[pred] == 1:
+                self.state.history["confusion_predictions"].append(pred.item())
+                self.state.history["confusion_labels"].append(pred.item())
+            else:
+                self.state.history["confusion_predictions"].append(pred.item())
+
+                # Get all indices where label is 1
+                true_label = torch.nonzero(label).flatten().tolist()
+
+                # Default to -1 if no label is found
+                chosen_label = next(iter(true_label), -1)
+                self.state.history["confusion_labels"].append(chosen_label)
+
+    def on_best_epoch(self):
+        self.state.save_state_to_file(self.best_path, file_name=FileNames.ConfusionMatrix.format(self.config.split))
+
+        self.state.history["confusion_predictions"] = []
+        self.state.history["confusion_labels"] = []

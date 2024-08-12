@@ -5,6 +5,41 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Fine-tune classifier on easy-vqa dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--train-split",
+                "train[:80]",
+                "--val-split",
+                "train[:80]",
+                //"--resume-training"
+            ]
+        },
+        {
+            "name": "Test, Visualization Easy-VQA dataset Confusion Matrix",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "visualization.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--metric",
+                "confusion-matrix",
+                "--split",
+                "train[:80]",
+            ]
+        },
+        {
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
@@ -29,24 +64,7 @@
                 // "--resume-training"
             ]
         },
-        {
-            "name": "Fine-tune classifier on easy-vqa dataset",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "finetune.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2-classifier",
-                "--dataset",
-                "easy-vqa",
-                "--train-split",
-                "train[:80]",
-                "--val-split",
-                "train[:80]",
-                //"--resume-training"
-            ]
-        },
+
         {
             "name": "Fine tune base classifier on easy-vqa dataset",
             "type": "debugpy",
@@ -104,21 +122,6 @@
             "args": [
                 "--model",
                 "blip2-base-classifier",
-                "--dataset",
-                "easy-vqa",
-                "--test-split",
-                "test[:30]",
-            ]
-        },
-        {
-            "name": "Test, Visualization Easy-VQA dataset",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "visualization.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2-classifier",
                 "--dataset",
                 "easy-vqa",
                 "--test-split",
@@ -225,7 +228,24 @@
             ]
         },
         {
-            "name": "Test, Visualization DAQUAR dataset",
+            "name": "Test, Visualization Easy-VQA dataset UMAP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "visualization.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--metric",
+                "umap",
+                "--split",
+                "test[:30]",
+            ]
+        },
+        {
+            "name": "Test, Visualization DAQUAR dataset UMAP",
             "type": "debugpy",
             "request": "launch",
             "program": "visualization.py",
@@ -235,8 +255,28 @@
                 "blip2-classifier",
                 "--dataset",
                 "daquar",
-                "--test-split",
+                "--metric",
+                "umap",
+                "--split",
                 "train[:300]",
+            ]
+        },
+
+        {
+            "name": "Test, Visualization DAQUAR dataset Confusion Matrix",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "visualization.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "daquar",
+                "--metric",
+                "confusion-matrix",
+                "--split",
+                "train[:80]",
             ]
         },
         {
