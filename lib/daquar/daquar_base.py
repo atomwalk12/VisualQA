@@ -12,10 +12,10 @@ from ..dataset_base import DatabaseBase
 logger = logging.getLogger(__name__)
 
 class DaquarDatasetBase(DatabaseBase):
+    # NOTE Total number of classes = 582. After filtering: 53
+    
     def __init__(self, params: VQAParameters):
         super().__init__(DatasetTypes.DAQUAR, params)
-        
-        
 
     def _get_answers(self):
         with open(os.path.join(DatasetPath.DAQUAR, "answer_space.txt")) as f:

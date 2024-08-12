@@ -15,7 +15,7 @@ from tqdm import tqdm
 from transformers import PreTrainedModel
 
 import wandb
-
+from ..types import CustomDataset
 from ..types import FileNames, State, TrainingParameters, VQAParameters
 from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time
 
@@ -108,7 +108,7 @@ class TorchBase(ABC):
 
         if params.train_args is not None:
             params.train_args.processor = processor
-            train_dataset = self.get_dataset(params.train_args)
+            train_dataset: CustomDataset = self.get_dataset(params.train_args)
             self.train_dataloader = DataLoader(
                 train_dataset,
                 batch_size=params.train_batch_size,
@@ -117,11 +117,12 @@ class TorchBase(ABC):
                 generator=EXPERIMENT.get_generator(),
                 num_workers=params.num_train_workers,
             )
+            self.answer_space = train_dataset.answer_space
             
 
         if params.val_args is not None:
             params.val_args.processor = processor
-            val_dataset = self.get_dataset(params.val_args)
+            val_dataset: CustomDataset = self.get_dataset(params.val_args)
             self.val_dataloader = DataLoader(
                 val_dataset,
                 batch_size=params.val_batch_size,
@@ -130,10 +131,11 @@ class TorchBase(ABC):
                 generator=EXPERIMENT.get_generator(),
                 num_workers=params.num_val_workers,
             )
+            self.answer_space = val_dataset.answer_space
 
         if params.test_args is not None:
             params.test_args.processor = processor
-            test_dataset = self.get_dataset(params.test_args)
+            test_dataset: CustomDataset = self.get_dataset(params.test_args)
             self.test_dataloader = DataLoader(
                 test_dataset,
                 batch_size=params.test_batch_size,
@@ -142,6 +144,7 @@ class TorchBase(ABC):
                 generator=EXPERIMENT.get_generator(),
                 num_workers=params.num_test_workers,
             )
+            self.answer_space = test_dataset.answer_space
 
         return model, processor
 

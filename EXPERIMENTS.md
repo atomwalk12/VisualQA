@@ -1,19 +1,13 @@
-# Main Experiments
-## Create the Easy-VQA dataset
+# Experiments
 
+
+## Easy VQA Dataset
+To fine tune the model run:
 ```python
-> mkdir -p data/easy-vqa data/models
-> python process.py --model blip2 --dataset easy-vqa --train "train[:1000]" --val "val[:120]"
+> python finetune.py --model blip2-classifier --dataset easy-vqa --train-split 'train[:80]' --val-split 'train[:80]'
 ```
 
-## Fine tune Blip 2 using lightning
+To check the confusion matrix run:
 ```python
-> mkdir -p data/easy-vqa data/models
-> python finetune.py --model blip2 --dataset easy-vqa --train "train[:1000]" --val "val[:120]" --use-lightning
-```
-
-## Fine tune Blip2 using simple pytorch loop
-```python
-> mkdir -p data/easy-vqa data/models
-> python finetune.py --model blip2 --dataset easy-vqa --train "train[:1000]" --val "val[:120]"
+> python visualization.py --model blip2-classifier --dataset easy-vqa --metric confusion-matrix --split 'train[:80]'
 ```
