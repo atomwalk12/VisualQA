@@ -121,8 +121,8 @@ class ClassificationTrainer(TorchBase):
 
                 best_epoch_loss = running_similarity / dataset_size
 
-                history["Test Loss"].append(best_epoch_loss)
-                wandb.log({"Test Loss": best_epoch_loss})
+                history["SBert Loss"].append(best_epoch_loss)
+                wandb.log({"SBert Similarity": best_epoch_loss})
 
                 bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
 

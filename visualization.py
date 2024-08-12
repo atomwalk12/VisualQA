@@ -36,6 +36,7 @@ def get_parser() -> argparse.ArgumentParser:
         required=True,
         help="The dataset to use",
     )
+    
     parser.add_argument(
         "--num-samples",
         type=int,

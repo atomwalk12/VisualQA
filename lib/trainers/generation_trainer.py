@@ -96,8 +96,8 @@ class GenerationTrainer(TorchBase):
 
                 similarity = running_similarity / dataset_size
 
-                history["Test Loss"].append(similarity)
-                wandb.log({"Test Loss": similarity})
+                history["SBert Similarity"].append(similarity)
+                wandb.log({"SBert Similarity": similarity})
 
                 bar.set_postfix(Batch=step, Accuracy=similarity)
 

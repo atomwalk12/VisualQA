@@ -20,6 +20,11 @@ class DaquarDatasetBase(DatabaseBase):
     def _get_answers(self):
         with open(os.path.join(DatasetPath.DAQUAR, "answer_space.txt")) as f:
             return f.read().splitlines()
+    
+    @classmethod
+    def get_answers(cls):
+        with open(os.path.join(DatasetPath.DAQUAR, "answer_space.txt")) as f:
+            return f.read().splitlines()
 
     def get_train_questions(self):
         dataset = load_dataset("csv", data_files={"train": os.path.join(DatasetPath.DAQUAR, "data_train.csv")})

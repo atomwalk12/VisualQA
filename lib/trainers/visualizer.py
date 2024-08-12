@@ -26,6 +26,8 @@ import seaborn as sns
 from lib.types import SAVE_PATHS, DatasetTypes, FileNames, ModelTypes, State
 from ..types import DatasetTypes, FileNames
 from .base_trainer import TorchBase
+from ..daquar.daquar_base import DaquarDatasetBase
+from ..easy_vqa.easyvqa_base import EasyVQADatasetBase
 
 logger = logging.getLogger(__name__)
 
@@ -117,18 +119,21 @@ class VisualizeGenerator(GenerationTrainer):
 class VisualizeClassifier(ClassificationTrainer):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            self.answer_space = DaquarDatasetBase.get_answers()
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            self.answer_space = EasyVQADatasetBase.get_answer()
 
     def confusion_matrix(self, matrix: State):
         all_preds = matrix.history['confusion_predictions']
         all_labels = matrix.history['confusion_labels']
-        answer_space = self.train_dataloader.dataset.answer_space
         
         # Compute confusion matrix
-        cm = confusion_matrix(all_labels, all_preds, labels=range(len(answer_space)))
+        cm = confusion_matrix(all_labels, all_preds, labels=range(len(self.answer_space)))
 
         # Plot the confusion matrix
         fig = plt.figure(figsize=(20, 20))
-        sns.heatmap(cm, annot=False, cmap='Blues', xticklabels=answer_space, yticklabels=answer_space)
+        sns.heatmap(cm, annot=False, cmap='Blues', xticklabels=self.answer_space, yticklabels=self.answer_space)
         plt.xlabel('Predicted')
         plt.ylabel('True')
         plt.title('Confusion Matrix')

@@ -21,6 +21,10 @@ class EasyVQADatasetBase(DatabaseBase):
     def _get_answers(self):
         return get_answers()
 
+    @classmethod
+    def get_answer(cls):
+        return get_answers()
+    
     def initialize_stratified_raw(self):
         """Method to initialize the dataset."""
 

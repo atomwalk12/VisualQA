@@ -49,8 +49,7 @@ def show_images_with_captions(images_or_paths: List[Image] | List[str], captions
     plt.show()
 
 def show_umap_clustering(split, dataset, num_samples=100):
-    assert split.startswith(Suffix.Test) or split.startswith(Suffix.Val)
-    
+   
     # Prepare the parameters
     train_args = VQAParameters(split=split, use_stratified_split=True)
     state = State()
