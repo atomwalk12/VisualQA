@@ -15,16 +15,19 @@ class Blip2ClassifierConfig(Blip2Config):
 
     def __init__(
         self,
+        answer_space_dim=None,
         classification_input_dim=0,
         base_model_name="blip2",
         interm_dim=1024,
+        save_embeddings=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.base_model_name = base_model_name
         self.interm_dim = interm_dim
         self.classification_input_dim = classification_input_dim
-        self.answer_space = get_answers()
+        self.answer_space_dim = answer_space_dim
+        self.save_embeddings = save_embeddings
 
 
 class Blip2(PreTrainedModel):
@@ -73,9 +76,7 @@ class Blip2(PreTrainedModel):
         model = cls(config, peft_model)
 
         # Load the additional layer
-        additional_layer_path = os.path.join(
-            pretrained_model_name_or_path, "classification_layer.pt"
-        )
+        additional_layer_path = os.path.join(pretrained_model_name_or_path, "classification_layer.pt")
         if os.path.exists(additional_layer_path):
             model.interm_layer.load_state_dict(torch.load(additional_layer_path))
 

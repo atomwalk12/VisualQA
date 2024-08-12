@@ -1,4 +1,4 @@
-from ..datasets_qa.easyvqa_base import EasyVQADatasetBase
+from .easyvqa_base import EasyVQADatasetBase
 from ..types import Suffix, VQAParameters
 
 

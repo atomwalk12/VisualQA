@@ -23,9 +23,9 @@
                 "--dataset",
                 "easy-vqa",
                 "--train-split",
-                "train[:30]",
+                "train[:1000]",
                 "--val-split",
-                "val[:30]",
+                "val[:250]",
                 // "--resume-training"
             ]
         },
@@ -108,6 +108,135 @@
                 "easy-vqa",
                 "--test-split",
                 "test[:30]",
+            ]
+        },
+        {
+            "name": "Test, Visualization Easy-VQA dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "visualization.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "easy-vqa",
+                "--test-split",
+                "test[:30]",
+            ]
+        },
+        {
+            "name": "Fine-tune blip2 on daquar dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-generator",
+                "--dataset",
+                "daquar",
+                "--train-split",
+                "train[:1000]",
+                "--val-split",
+                "val[:250]",
+                // "--resume-training"
+            ]
+        },
+        {
+            "name": "Fine-tune classifier on daquar dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "daquar",
+                "--train-split",
+                "train[:80]",
+                "--val-split",
+                "train[:80]",
+                //"--resume-training"
+            ]
+        },
+        {
+            "name": "Fine tune base classifier on daquar dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "finetune.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-base-classifier",
+                "--dataset",
+                "daquar",
+                "--train-split",
+                "train[:85]",
+                "--val-split",
+                "train[:80]",
+                "--resume-training"
+            ]
+        },
+        {
+            "name": "Test, blip2-generator on daquar dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-generator",
+                "--dataset",
+                "daquar",
+                "--test-split",
+                "test[:30]"
+            ]
+        },
+        {
+            "name": "Test, blip2-classifier on classification daquar dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "daquar",
+                "--test-split",
+                "test[:30]",
+            ]
+        },
+        {
+            "name": "Test, blip2-base-classifier on classification base daquar dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-base-classifier",
+                "--dataset",
+                "daquar",
+                "--test-split",
+                "test[:30]",
+            ]
+        },
+        {
+            "name": "Test, Visualization DAQUAR dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "visualization.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model",
+                "blip2-classifier",
+                "--dataset",
+                "daquar",
+                "--test-split",
+                "train[:300]",
             ]
         },
         {

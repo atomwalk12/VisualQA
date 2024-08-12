@@ -33,7 +33,7 @@ class Blip2BaseClassifier(Blip2):
         # 1408 + 2560
         # Fusion and final classification
         self.peft_config: Blip2Config = peft_model.peft_config
-        self.answer_space = config.answer_space
+        self.answer_space = config.answer_space_dim
 
         self.interm_layer = nn.Sequential(
             nn.Linear(config.classification_input_dim, config.interm_dim),  # 32 x 768
@@ -57,7 +57,6 @@ class Blip2BaseClassifier(Blip2):
         # the total number of features is 24576
         text_features = self.get_text_embedding(input_ids)
         features = torch.cat((language_features, text_features), dim=1)
-
 
         # Classification
         interm_output = self.interm_layer(features)

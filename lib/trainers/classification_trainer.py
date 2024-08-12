@@ -3,20 +3,21 @@ import logging
 
 import torch
 import torch.utils.checkpoint
-from peft import prepare_model_for_kbit_training
-
-# PyTorch TensorBoard support
+from peft import LoraConfig
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+from transformers import BitsAndBytesConfig
 
 import wandb
 from config import Repositories
 
+from ..datasets_qa.daquar.daquar_classification import DaquarClassification
 from ..datasets_qa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2, Blip2ClassifierConfig
 from ..models.blip2_base_classifier import Blip2BaseClassifier
 from ..models.blip2_classifier import Blip2Classifier
-from ..representations import SAVE_PATHS, ModelFactory, ModelTypes
-from ..types import Suffix, TrainingParameters
+from ..representations import ModelFactory, ModelTypes
+from ..types import SAVE_PATHS, DatasetTypes, TrainingParameters
 from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
@@ -35,18 +36,17 @@ class ClassificationTrainer(TorchBase):
             return Repositories.VQAClassification
 
     def get_save_path(self):
-        model_name = self.model_name
-        if model_name == ModelTypes.BLIP2BaseClassifier:
-            return SAVE_PATHS.BLIP2_BaseClassifier
-        elif model_name == ModelTypes.BLIP2Classifier:
-            return SAVE_PATHS.BLIP2_Classifier
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            return SAVE_PATHS.BLIP2_Classifier_DAQUAR
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            return SAVE_PATHS.BLIP2_Classifier_EasyVQA
 
     def load_from_checkpoint(self, is_trainable):
-        base_model, processor = ModelFactory.get_models(self.model_name, apply_lora=False)
+        base_model, processor = self.get_models(apply_lora=False)
 
-        base_model = prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
+        base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
-        local_model_path = self.get_model_save_path()
+        local_model_path = self.best_path
         if self.model_name == ModelTypes.BLIP2Classifier:
             model = Blip2Classifier.from_pretrained(
                 base_model,
@@ -66,29 +66,29 @@ class ClassificationTrainer(TorchBase):
 
         return model, processor
 
-    def get_model_save_path(self):
-        if self.model_name == ModelTypes.BLIP2BaseClassifier:
-            return SAVE_PATHS.BLIP2_BaseClassifier
-        elif self.model_name == ModelTypes.BLIP2Classifier:
-            return SAVE_PATHS.BLIP2_Classifier
 
     def bootstrap_model(self):
         model_name = self.model_name
         # Load the model and processor
-        model, processor = ModelFactory.get_models(model_name, apply_lora=True)
+        model, processor = self.get_models(apply_lora=True)
+        answer_space_dim = 13 if self.config.dataset_name == DatasetTypes.EASY_VQA else 582
 
         if model_name == ModelTypes.BLIP2BaseClassifier:
-            config = Blip2ClassifierConfig(classification_input_dim=5120)
+            config = Blip2ClassifierConfig(
+                classification_input_dim=5120, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim
+            )
             model = Blip2BaseClassifier(config, model)
         elif model_name == ModelTypes.BLIP2Classifier:
-            config = Blip2ClassifierConfig(classification_input_dim=24576)
+            config = Blip2ClassifierConfig(
+                classification_input_dim=768, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim
+            )
             model = Blip2Classifier(config, model)
 
         return model, processor
 
     def test(self):
         self.model.eval()
-        answer_space = self.model.answer_space
+        answer_space = self.test_dataloader.dataset.answer_space
         history = self.state.history
 
         dataset_size = 0
@@ -133,12 +133,11 @@ class ClassificationTrainer(TorchBase):
                         best_epoch_loss,
                         history,
                         step + 1,
-                        Suffix.Test,
-                        self.test_dataloader.dataset,
+                        self.test_dataloader,
                     )
 
         # Save the entire results
-        self.save_state(best_epoch_loss, history, step + 1, Suffix.Test, self.test_dataloader.dataset)
+        self.save_state(best_epoch_loss, history, step + 1, self.test_dataloader)
 
         # Release resources
         gc.collect()
@@ -156,24 +155,50 @@ class ClassificationTrainer(TorchBase):
         return input_ids, pixel_values, attention_mask, labels
 
     def get_dataset(self, args):
-        return EasyVQAClassification(args)
+        if self.dataset_name == DatasetTypes.EASY_VQA:
+            return EasyVQAClassification(args)
+        elif self.dataset_name == DatasetTypes.DAQUAR:
+            return DaquarClassification(args)
 
     def update_state_with_embeddings(self, embeddings):
         # This is done automatically within the model's state. Nothing to do.
         pass
 
-    def save_state(self, best_epoch_loss, history, epoch, suffix, dataset):
+    def save_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):  # noqa: F821
         # This should always be true, but checking for intellisense completion.
         assert isinstance(self.model, Blip2)
+        if self.save_embeddings:
+            embeddings = self.model.get_state()
+            history["embeddings"] = embeddings
 
         # retrieve model's state and save to file
         self.state.save_state(
-            self.best_path,
-            best_epoch_loss,
-            history,
-            epoch,
-            self.scheduler,
-            self.optimizer,
-            dataset,
-            file_name=f"{suffix}_state_dict",
+            self.best_path, best_epoch_loss, history, epoch, self.scheduler, self.optimizer, dataloader.dataset
+        )
+
+    def get_models(self, apply_lora):
+        return ModelFactory.get_models(
+            self.model_name,
+            apply_lora=apply_lora,
+            lora_config=self.lora,
+            bnb_config=self.bnb,
+            torch_dtype=torch.float32,
+        )
+
+    def bnb_config(self) -> BitsAndBytesConfig:
+        """Create a BitsAndBytesConfig for quantization."""
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+
+    def lora_config(self) -> LoraConfig:
+        """Create a LoraConfig for PEFT."""
+        return LoraConfig(
+            r=8,
+            lora_alpha=8,
+            lora_dropout=0.1,
+            target_modules="all-linear",
+            init_lora_weights="gaussian",
         )

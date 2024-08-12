@@ -12,25 +12,9 @@ from transformers import (
     Conv1D,
 )
 
-from .types import (
-    MODEL_CLASS_MAPPING,
-    MODEL_REPO_MAPPING,
-    PROCESSOR_CLASS_MAPPING,
-    SAVE_PATHS,
-    ModelTypes,
-)
+from .types import MODEL_CLASS_MAPPING, MODEL_REPO_MAPPING, PROCESSOR_CLASS_MAPPING, ModelTypes
 
 logger = logging.getLogger(__name__)
-
-
-def get_models_dir(classif: bool, model_name: str):
-    if classif:
-        if model_name == ModelTypes.BLIP2Base:
-            return SAVE_PATHS.BLIP2_BaseClassifier
-        elif model_name == ModelTypes.BLIP2:
-            return SAVE_PATHS.BLIP2_Classifier
-    elif model_name == ModelTypes.BLIP2:
-        return SAVE_PATHS.BLIP2_Generator
 
 
 class ModelFactory:
@@ -41,9 +25,7 @@ class ModelFactory:
         # Recursively visit all modules and submodules
         for name, module in model.named_modules():
             # Check if the module is an instance of the specified layers
-            if isinstance(
-                module, (torch.nn.Linear, torch.nn.Embedding, torch.nn.Conv2d, Conv1D)
-            ):
+            if isinstance(module, (torch.nn.Linear, torch.nn.Embedding, torch.nn.Conv2d, Conv1D)):
                 # model name parsing
                 layer_names.append(name)
 
@@ -70,7 +52,7 @@ class ModelFactory:
         )
 
     def get_models(
-        model_name: ModelTypes, apply_lora: bool, lora_config=None, bnb_config=None
+        model_name: ModelTypes, apply_lora: bool, lora_config, bnb_config: BitsAndBytesConfig, torch_dtype
     ) -> Tuple[AutoModel, AutoProcessor]:
         """
         Get the model and processor for a given model type.
@@ -95,21 +77,18 @@ class ModelFactory:
         # Load both the processor and model
         processor = processor_class.from_pretrained(repo_id)
 
-        bnb_config = ModelFactory.bnb_config() if bnb_config is None else bnb_config
-
-        model = model_class.from_pretrained(
-            repo_id, torch_dtype=torch.float16, quantization_config=bnb_config
-        )
+        model = model_class.from_pretrained(repo_id, torch_dtype=torch_dtype, quantization_config=bnb_config)
 
         if apply_lora:
-            lora_config = (
-                ModelFactory.lora_config() if lora_config is None else lora_config
-            )
-
-            model = prepare_model_for_kbit_training(
-                model, use_gradient_checkpointing=True
-            )
+            model = ModelFactory.prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
             model = get_peft_model(model, lora_config)
             model.print_trainable_parameters()
 
         return model, processor
+
+    def prepare_model_for_kbit_training(model, use_gradient_checkpointing):
+        return prepare_model_for_kbit_training(
+            model,
+            use_gradient_checkpointing=use_gradient_checkpointing,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+        )

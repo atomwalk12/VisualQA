@@ -20,5 +20,5 @@
         "vlabels",
         "voutputs"
     ],
-    "debugpy.debugJustMyCode": false
+    "debugpy.debugJustMyCode": false,
 }

@@ -75,6 +75,7 @@ def get_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    
 
     return parser
 
@@ -88,12 +89,14 @@ def main(args: argparse.Namespace):
     val_args = VQAParameters(split=args.val_split, use_stratified_split=True)
     parameters = TrainingParameters(
         num_epochs=args.num_epochs,
-        resume=args.resume_training,
+        resume_checkpoint=args.resume_training,
         model_name=args.model,
+        dataset_name=args.dataset,
         is_trainable=True,
         train_args=train_args,
         val_args=val_args,
         test_args=None,
+        resume_state=False
     )
 
     if args.model == ModelTypes.BLIP2Generator:
@@ -108,7 +111,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore")
+    # warnings.filterwarnings("ignore")
     SAVE_PATHS.make_dirs()
 
     parser = get_parser()

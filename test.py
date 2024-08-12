@@ -6,7 +6,7 @@ import warnings
 
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
-from lib.types import ModelTypes, TrainingParameters, VQAParameters
+from lib.types import SAVE_PATHS, DatasetTypes, ModelTypes, TrainingParameters, VQAParameters
 from lib.trainers.base_trainer import TorchBase
 from lib.utils import EXPERIMENT
 logging.basicConfig(level=logging.INFO)
@@ -23,9 +23,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dataset",
-        choices=[
-            "easy-vqa",
-        ],
+        choices=[choice for choice in DatasetTypes],
         type=str,
         help="The dataset to use",
     )
@@ -44,17 +42,20 @@ def get_parser() -> argparse.ArgumentParser:
 def evaluate_model(args):
     if isinstance(args.seed, int):
         EXPERIMENT.set_seed(args.seed).apply_seed()
+        
     
     test_args = VQAParameters(
         split=args.test_split, is_testing=True, use_stratified_split=True
     )
     parameters = TrainingParameters(
-        resume=False,
+        dataset_name=args.dataset,
+        resume_checkpoint=False,
         model_name=args.model,
         is_trainable=False,
         train_args=None,
         val_args=None,
         test_args=test_args,
+        resume_state=False
     )
 
     if args.model == ModelTypes.BLIP2Generator:

@@ -1,20 +1,23 @@
 import gc
+import itertools
 import logging
 
 import torch
 import torch.utils.checkpoint
-from peft import prepare_model_for_kbit_training
+from peft import LoraConfig
 from peft.peft_model import PeftModel
-
-# PyTorch TensorBoard support
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+from transformers import BitsAndBytesConfig
+from transformers.models.blip_2.modeling_blip_2 import Blip2ForConditionalGenerationModelOutput
 
 import wandb
 from config import Repositories
 
-from ..datasets_qa.easyvqa_generation import EasyVQAGeneration
-from ..representations import SAVE_PATHS, ModelFactory
-from ..types import Suffix, TrainingParameters
+from ..daquar.daquar_generation import DaquarGeneration
+from ..easy_vqa.easyvqa_generation import EasyVQAGeneration
+from ..representations import ModelFactory
+from ..types import SAVE_PATHS, DatasetTypes, TrainingParameters
 from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
@@ -23,21 +26,23 @@ logger = logging.getLogger(__name__)
 class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
-
         self.update_frequency = 64
 
     def get_repository(self):
         return Repositories.VQAGeneration
 
     def get_save_path(self):
-        return SAVE_PATHS.BLIP2_Generator
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            return SAVE_PATHS.BLIP2_Generator_DAQUAR
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            return SAVE_PATHS.BLIP2_Generator_EasyVQA
 
     def load_from_checkpoint(self, is_trainable):
-        base_model, processor = ModelFactory.get_models(self.model_name, apply_lora=False)
+        base_model, processor = self.get_models(apply_lora=False)
 
-        base_model = prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
+        base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
-        local_model_path = self.get_model_save_path()
+        local_model_path = self.best_path
         model = PeftModel.from_pretrained(
             base_model,
             local_model_path,
@@ -48,11 +53,8 @@ class GenerationTrainer(TorchBase):
 
         return model, processor
 
-    def get_model_save_path(self):
-        return SAVE_PATHS.BLIP2_Generator
-
     def bootstrap_model(self):
-        model, processor = ModelFactory.get_models(self.model_name, apply_lora=True)
+        model, processor = self.get_models(apply_lora=True)
         return model, processor
 
     def test(self):
@@ -78,10 +80,14 @@ class GenerationTrainer(TorchBase):
                 )
                 generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-                for sample, label in zip(generated_text, labels):
+                max_similarity = 0
+                for sample, label in zip(itertools.repeat(generated_text), labels):
                     similarity = self.sbert_similarity(sample, label)
-                    running_similarity += similarity
-                    dataset_size += 1
+                    if similarity > max_similarity:
+                        max_similarity = similarity
+
+                running_similarity += max_similarity
+                dataset_size += 1
 
                 best_epoch_loss = running_similarity / dataset_size
 
@@ -92,22 +98,10 @@ class GenerationTrainer(TorchBase):
 
                 # Save the state
                 if step % self.update_frequency == 0:
-                    self.save_state(
-                        best_epoch_loss,
-                        history,
-                        step + 1,
-                        Suffix.Test,
-                        self.test_dataloader.dataset,
-                    )
+                    self.save_state(best_epoch_loss, history, step + 1, self.test_dataloader)
 
         # Finally save the entire run results
-        self.save_state(
-            best_epoch_loss,
-            history,
-            step + 1,
-            Suffix.Test,
-            self.test_dataloader.dataset,
-        )
+        self.save_state(best_epoch_loss, history, step + 1, self.test_dataloader)
 
         # Release resources
         gc.collect()
@@ -125,20 +119,44 @@ class GenerationTrainer(TorchBase):
         return input_ids, pixel_values, attention_mask, labels
 
     def get_dataset(self, args):
-        return EasyVQAGeneration(args)
+        if self.dataset_name == DatasetTypes.EASY_VQA:
+            return EasyVQAGeneration(args)
+        elif self.dataset_name == DatasetTypes.DAQUAR:
+            return DaquarGeneration(args)
 
-    def update_state_with_embeddings(self, embeddings):
+    def update_state_with_embeddings(self, embeddings: Blip2ForConditionalGenerationModelOutput):
         # this is done for every iteration
+        embeddings = {"pooler_output": embeddings.qformer_outputs.pooler_output.to("cpu")}
         self.state.history["embeddings"].append(embeddings)
 
-    def save_state(self, best_epoch_loss, history, epoch, suffix, dataset):
+    def save_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
         self.state.save_state(
-            self.best_path,
-            best_epoch_loss,
-            history,
-            epoch,
-            self.scheduler,
-            self.optimizer,
-            dataset,
-            file_name=f"{suffix}_state_dict",
+            self.best_path, best_epoch_loss, history, epoch, self.scheduler, self.optimizer, dataloader.dataset
+        )
+
+    def get_models(self, apply_lora):
+        return ModelFactory.get_models(
+            self.model_name,
+            apply_lora=apply_lora,
+            lora_config=self.lora,
+            bnb_config=self.bnb,
+            torch_dtype=torch.float16,
+        )
+
+    def bnb_config(self) -> BitsAndBytesConfig:
+        """Create a BitsAndBytesConfig for quantization."""
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+
+    def lora_config(self) -> LoraConfig:
+        """Create a LoraConfig for PEFT."""
+        return LoraConfig(
+            r=16,
+            lora_alpha=16,
+            lora_dropout=0.1,
+            target_modules="all-linear",
+            init_lora_weights="gaussian",
         )

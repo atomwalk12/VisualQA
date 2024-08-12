@@ -6,32 +6,29 @@ from pathlib import Path
 
 import pandas as pd
 from datasets import Dataset
-from easy_vqa import (
-    get_answers,
-    get_test_image_paths,
-    get_test_questions,
-    get_train_image_paths,
-    get_train_questions,
-)
-from PIL import Image
 
-from ..types import CustomDataset, Suffix, VQAParameters
-from ..utils import EXPERIMENT, ROOT_DATA_DIR, parse_split_slicer
+from .types import CustomDataset, DatasetTypes, Suffix, VQAParameters
+from .utils import ROOT_DATA_DIR
 
 logger = logging.getLogger(__name__)
 
 
-class EasyVQADatasetBase(CustomDataset, ABC):
+class DatabaseBase(CustomDataset, ABC):
     raw_dataset: Dataset = None
     _dataset: Dataset = None
+    padding_max_length: int
 
-    def __init__(self, params: VQAParameters):
+    def __init__(self, dataset_name: DatasetTypes, params: VQAParameters):
         super().__init__(params.split)
+        self.dataset_name = dataset_name
 
         assert params.processor is not None
+        
+        self.padding_max_length = self.get_padding_max_length()
+        
+        self.min_class_size = 50
 
         # Store parameters
-        self.padding_max_length = params.padding_max_length
         self.processor = params.processor
         self.use_stratified_split = params.use_stratified_split
 
@@ -39,7 +36,7 @@ class EasyVQADatasetBase(CustomDataset, ABC):
         self.split: str = params.split
 
         # Store the answer space for commodity
-        self.answer_space = get_answers()
+        self.answer_space = self._get_answers()
 
         # Create mappings
         self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
@@ -58,85 +55,6 @@ class EasyVQADatasetBase(CustomDataset, ABC):
 
         self.is_testing = params.is_testing
         self.use_raw_dataset = False
-
-    def initialize_stratified_raw(self):
-        """Method to initialize the dataset."""
-
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            questions = get_train_questions()
-            images = get_train_image_paths()
-        elif self.split.startswith(Suffix.Test):
-            questions = get_test_questions()
-            images = get_test_image_paths()
-
-        dict = {
-            "question": questions[0],
-            "answer": questions[1],
-            "image_id": questions[2],
-            "image_path": [images[image_id] for image_id in questions[2]],
-            "image": [Image.open(images[image_id]) for image_id in questions[2]],
-        }
-
-        # Needs a shuffle, otherwise the stratification doesn't work since after
-        # filtering there will be too few entries from some classes.
-        raw_dataset = Dataset.from_dict(dict)
-
-        # Now filter the dataset based on the number of items requested
-        split, start, end = parse_split_slicer(self.split)
-
-        if start is not None or end is not None:
-            assert split in [choice for choice in Suffix]
-            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
-            start = 0 if start is None else start
-            end = len(ds) if end is None else end
-
-            if split == Suffix.Val or split == Suffix.Test:
-                size = end - start
-            else:
-                size = len(ds) - (end - start)
-
-            ds = ds.class_encode_column("stratify_column").train_test_split(
-                test_size=size,
-                stratify_by_column="stratify_column",
-                seed=EXPERIMENT.get_seed(),
-            )
-            raw_dataset = ds[split if split == Suffix.Train else Suffix.Test]
-
-            assert len(raw_dataset) == end - start
-
-        logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
-        return raw_dataset
-
-    def initialize_raw(self):
-        """Method to initialize the dataset."""
-
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            questions = get_train_questions()
-            images = get_train_image_paths()
-        elif self.split.startswith(Suffix.Test):
-            questions = get_test_questions()
-            images = get_test_image_paths()
-
-        dict = {
-            "question": questions[0],
-            "answer": questions[1],
-            "image_id": questions[2],
-            "image_path": [images[image_id] for image_id in questions[2]],
-            "image": [Image.open(images[image_id]) for image_id in questions[2]],
-        }
-
-        raw_dataset = Dataset.from_dict(dict)
-
-        split, start, end = parse_split_slicer(self.split)
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            target = Suffix.Test if split.startswith(Suffix.Val) else split
-            raw_dataset = raw_dataset.train_test_split(test_size=0.25, seed=EXPERIMENT.get_seed())[target]
-
-        if start is not None or end is not None:
-            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
-
-        logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
-        return raw_dataset
 
     @property
     def dataset(self):
@@ -240,18 +158,34 @@ class EasyVQADatasetBase(CustomDataset, ABC):
             self.initialize_for_training()
             self.save()
 
+    def get_make_complete_path(self, type):
+        # type will be instantiated in subclass
+        assert type is not None
+
+        Path(f"{ROOT_DATA_DIR}/{self.dataset_name}/{type}").mkdir(parents=True, exist_ok=True)
+        out = f"{ROOT_DATA_DIR}/{self.dataset_name}/{type}/{self.split}.pkl"
+        return os.path.abspath(out)
+
     def equals(self, other: Dataset):
         dataset = self.dataset.to_pandas()
         return dataset.equals(other.to_pandas())
 
     @abstractmethod
+    def initialize_stratified_raw(self):
+        pass
+
+    @abstractmethod
+    def initialize_raw(self):
+        pass
+
+    @abstractmethod
     def _prepare_for_training(self, item: dict):
         pass
 
-    def get_make_complete_path(self, type):
-        # type will be instantiated in subclass
-        assert type is not None
+    @abstractmethod
+    def _get_answers(self):
+        pass
 
-        Path(f"{ROOT_DATA_DIR}/easy_vqa/{type}").mkdir(parents=True, exist_ok=True)
-        out = f"{ROOT_DATA_DIR}/easy_vqa/{type}/{self.split}.pkl"
-        return os.path.abspath(out)
+    @abstractmethod
+    def get_padding_max_length(self):
+        pass

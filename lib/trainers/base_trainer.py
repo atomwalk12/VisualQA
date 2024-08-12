@@ -16,7 +16,7 @@ from transformers import PreTrainedModel
 
 import wandb
 
-from ..types import State, Suffix, TrainingParameters, VQAParameters
+from ..types import State, TrainingParameters, VQAParameters
 from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,25 @@ class TorchBase(ABC):
     model: PreTrainedModel
 
     def __init__(self, config: TrainingParameters):
+        # Log information to file
+        self.model_name = config.model_name
+        self.add_logger()
+        self.dataset_name = config.dataset_name
+        
+        # The path to store the best model
+        self.best_path = self.get_save_path()
+        
+        # Whether to register embeddings
+        self.save_embeddings = False
+
+        self.update_frequency = 64
+        self.lora = self.lora_config()
+        self.bnb = self.bnb_config()
+
+        # Log configurations
+        logger.info(self.lora)
+        logger.info(self.bnb)
+
         # This forces CUDA operations to be executed sequentially, which can
         # help with debugging by providing more precise error messages
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -45,31 +64,25 @@ class TorchBase(ABC):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Prepare the module for training
-        self.resume = config.resume
-        self.model_name = config.model_name
+        self.resume_checkpoint = config.resume_checkpoint
         self.model, self.processor = self.prepare_module()
         self.model.to(self.device)
-
-        # Log information to file
-        self.add_logger()
 
         # Load Sentence-BERT model
         self.sbert = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
-        # Setup wandb and log model properties
-        self.run = wandb.init(
-            project=config.wandb_project,
-            config=config,
-            job_type="Train",
-            tags=[config.model_name],
-            name=f"{config.model_name}-baseline",
-            anonymous="must",
-        )
+        if config.use_wandb:
+            # Setup wandb and log model properties
+            self.run = wandb.init(
+                project=config.wandb_project,
+                config=config,
+                job_type="Train",
+                tags=[config.model_name],
+                name=f"{config.model_name}-baseline",
+                anonymous="must",
+            )
 
-        wandb.watch(self.model, log_freq=100)
-
-        # The path to store the best model
-        self.best_path = self.get_save_path()
+            wandb.watch(self.model, log_freq=100)
 
         # Repository where to upload the results
         self.repo = self.get_repository()
@@ -79,24 +92,16 @@ class TorchBase(ABC):
         self.optimizer = self.hyperparameters.optimizer
         self.scheduler = self.hyperparameters.scheduler
 
-        if not self.resume:
+        if not config.resume_state:
             self.state = State()
         else:
-            suffix = Suffix.Train if config.is_trainable else Suffix.Test
-
-            if suffix == Suffix.Train:
-                assert self.train_dataloader is not None, "Train dataloader must be provided for training."
-                assert self.val_dataloader is not None, "Validation dataloader must be provided for training."
-            else:
-                assert self.test_dataloader is not None, "Test dataloader must be provided for testing."
-
-            self.state = State.load_state(self.best_path, suffix=suffix)
+            self.state = State.load_state(self.best_path, self.dataset_name, f"state_dict_{config.split}.pkl")
             self.optimizer.load_state_dict(self.state.optimizer_state_dict)
             self.scheduler.load_state_dict(self.state.scheduler_state_dict)
 
     def prepare_module(self):
         params = self.config
-        if self.resume:
+        if self.resume_checkpoint:
             model, processor = self.load_from_checkpoint(is_trainable=params.is_trainable)
         else:
             model, processor = self.bootstrap_model()
@@ -112,6 +117,7 @@ class TorchBase(ABC):
                 generator=EXPERIMENT.get_generator(),
                 num_workers=params.num_train_workers,
             )
+            
 
         if params.val_args is not None:
             params.val_args.processor = processor
@@ -181,14 +187,15 @@ class TorchBase(ABC):
 
                 # Save a model file from the current directory
                 print(f"Model Saved{reset} --> {self.best_path}")
+            else:
+                logger.info(f"{val_loss=}")
 
             # Saving the epoch which is supposed to be the next
             self.save_state(
                 best_epoch_loss,
                 history,
                 epoch + 1,
-                Suffix.Train,
-                self.train_dataloader.dataset,
+                self.train_dataloader,
             )
 
             print()
@@ -240,6 +247,8 @@ class TorchBase(ABC):
                 labels=labels,
                 attention_mask=attention_mask,
             )
+            if self.save_embeddings:
+                self.update_state_with_embeddings(outputs)
 
             # Now update the loss
             loss = outputs.loss
@@ -324,7 +333,7 @@ class TorchBase(ABC):
         Path(f"{ROOT_DATA_DIR}/logs/{self.model_name}").mkdir(parents=True, exist_ok=True)
 
         handler = logging.FileHandler(
-            filename=f"{ROOT_DATA_DIR}/logs/{self.model_name}/{datetime.now().strftime('_%H_%M_%d_%m_%Y.log')}"
+            filename=f"{ROOT_DATA_DIR}/logs/{self.model_name}/{datetime.now().strftime('%m_%d_%Y_%H_%M.log')}"
         )
         handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter("%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s")
@@ -352,10 +361,6 @@ class TorchBase(ABC):
         pass
 
     @abstractmethod
-    def get_model_save_path(self):
-        pass
-
-    @abstractmethod
     def test(self):
         pass
 
@@ -369,5 +374,13 @@ class TorchBase(ABC):
         pass
 
     @abstractmethod
-    def save_state(self, best_epoch_loss, history, epoch, suffix, dataset):
+    def save_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
+        pass
+
+    @abstractmethod
+    def bnb_config(self):
+        pass
+
+    @abstractmethod
+    def lora_config(self):
         pass

@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 
 class DatasetTypes(StrEnum):
     EASY_VQA = "easy-vqa"
+    DAQUAR = "daquar"
 
+class DatasetPath(StrEnum):
+    DAQUAR = "data/daquar/dataset"
 
 class ModelTypes(StrEnum):
     BLIP2Generator = "blip2-generator"
@@ -58,15 +61,16 @@ PROCESSOR_CLASS_MAPPING = {
 
 
 class SAVE_PATHS(StrEnum):
-    BLIP2_Generator = "data/models/generator"
-    BLIP2_Classifier = "data/models/classifier"
-    BLIP2_BaseClassifier = "data/models/base_classifier"
+    BLIP2_Generator_EasyVQA = "data/models/easy_vqa/generator"
+    BLIP2_Classifier_EasyVQA = "data/models/easy_vqa/classifier"
+    BLIP2_Generator_DAQUAR = "data/models/daquar/generator"
+    BLIP2_Classifier_DAQUAR = "data/models/daquar/classifier"
 
     def make_dirs():
-        Path(SAVE_PATHS.BLIP2_Generator).mkdir(parents=True, exist_ok=True)
-        Path(SAVE_PATHS.BLIP2_Classifier).mkdir(parents=True, exist_ok=True)
-        Path(SAVE_PATHS.BLIP2_BaseClassifier).mkdir(parents=True, exist_ok=True)
-
+        Path(SAVE_PATHS.BLIP2_Generator_EasyVQA).mkdir(parents=True, exist_ok=True)
+        Path(SAVE_PATHS.BLIP2_Classifier_EasyVQA).mkdir(parents=True, exist_ok=True)
+        Path(SAVE_PATHS.BLIP2_Generator_DAQUAR).mkdir(parents=True, exist_ok=True)
+        Path(SAVE_PATHS.BLIP2_Classifier_DAQUAR).mkdir(parents=True, exist_ok=True)
 
 class CustomDataset(Dataset, ABC):
     ready_for_training: bool
@@ -116,7 +120,7 @@ class State:
         scheduler: lr_scheduler.CosineAnnealingLR,
         optimizer: AdamW,
         dataset: CustomDataset,
-        file_name: str = "state_dict.pkl",
+        file_name: str = "state_dict",
     ):
         self.best_epoch_loss = epoch_loss
         self.history = history
@@ -124,24 +128,36 @@ class State:
         self.scheduler_state_dict = scheduler.state_dict()
         self.optimizer_state_dict = optimizer.state_dict()
 
-        with open(f"{best_path}/{file_name}_{dataset.split}.pkl", "wb") as file:
+        path = f"{best_path}/{file_name}_{dataset.split}.pkl"
+        with open(path, "wb") as file:
             pickle.dump(self, file)
 
-        logger.info(f"Results were saved to {best_path}/{file_name}")
+        logger.info(f"Results were saved to {path}")
+        
+    def save_embeddings(
+        self,
+        best_path: str,
+        file_name: str,
+    ):
+        path = f"{best_path}/{file_name}"
+        with open(path, "wb") as file:
+            pickle.dump(self, file)
+
+        logger.info(f"Results were saved to {path}")
 
     @classmethod
-    def load_state(self, path, suffix: Suffix):
+    def load_state(self, path, dataset_name, filename: str):
+        path = f"{path}/{dataset_name}/{filename}"
         try:
-            return pd.read_pickle(f"{path}/{suffix}_state_dict.pkl")
+            return pd.read_pickle(path)
         except FileNotFoundError:
-            return State()
+            raise
 
 
 @dataclass
 class VQAParameters:
     split: str
     is_testing: bool = False
-    padding_max_length: int = 25
     processor: Blip2Processor = None
     load_from_disk: bool = True
     dataset_name: str = DatasetTypes.EASY_VQA
@@ -150,17 +166,27 @@ class VQAParameters:
 
 @dataclass
 class TrainingParameters:
-    resume: bool
+    resume_checkpoint: bool
     model_name: str
     is_trainable: bool
     train_args: VQAParameters
     val_args: VQAParameters
     test_args: VQAParameters
+    dataset_name: str
     wandb_project: str = "ComputerVision"
     shuffle_train: bool = True
     num_train_workers: int = 12
     num_val_workers: int = 8
     num_test_workers: int = 8
+    use_wandb: bool = True
+    split: str = None
+    resume_state: bool = True
+    
+    def __post_init__(self):
+        if self.test_args is not None:
+            self.split = self.test_args.split
+        if self.train_args is not None:
+            self.split = self.train_args.split
 
     def __repr__(self):
         return (

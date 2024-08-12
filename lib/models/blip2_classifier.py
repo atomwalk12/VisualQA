@@ -28,7 +28,7 @@ class Blip2Classifier(Blip2):
         # 1408 + 2560
         # Fusion and final classification
         self.peft_config: Blip2Config = peft_model.peft_config
-        self.answer_space = config.answer_space
+        self.answer_space_dim = config.answer_space_dim
 
         self.interm_layer = nn.Sequential(
             nn.Linear(config.classification_input_dim, config.interm_dim),  # 32 x 768
@@ -36,7 +36,7 @@ class Blip2Classifier(Blip2):
             nn.Dropout(0.5),
         )
 
-        self.classifier = nn.Linear(config.interm_dim, len(self.answer_space))
+        self.classifier = nn.Linear(config.interm_dim, self.answer_space_dim)
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(
@@ -52,14 +52,9 @@ class Blip2Classifier(Blip2):
             pixel_values=pixel_values,
             labels=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
         )
 
-        # q-former_outputs 32 x 768
-        batch_size = input_ids.size(0)
-
-        # the total number of features is 24576
-        features = outputs.qformer_outputs.last_hidden_state.view(batch_size, -1)
+        features = outputs.qformer_outputs["pooler_output"]
 
         # Classification
         interm_output = self.interm_layer(features)
