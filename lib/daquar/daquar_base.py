@@ -37,9 +37,9 @@ class DaquarDatasetBase(DatabaseBase):
     def initialize_stratified_raw(self):
         """Method to initialize the dataset."""
 
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
+        if self.split.startswith(Suffix.Train):
             dataset = self.get_train_questions()['train']
-        elif self.split.startswith(Suffix.Test):
+        elif self.split.startswith(Suffix.Val) or self.split.startswith(Suffix.Test):
             dataset = self.get_test_questions()['val']
 
         dict = {
@@ -82,6 +82,8 @@ class DaquarDatasetBase(DatabaseBase):
             raw_dataset = filtered[split if split == Suffix.Train else Suffix.Test]
 
             assert len(raw_dataset) == end - start
+            
+        raw_dataset.shuffle(seed=EXPERIMENT.get_seed())
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         

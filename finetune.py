@@ -66,7 +66,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--num-epochs",
         type=int,
         help="The number of epochs to train for.",
-        default=120,
+        default=5000,
     )
 
     parser.add_argument(
@@ -111,7 +111,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    # warnings.filterwarnings("ignore")
+    warnings.filterwarnings("ignore")
     SAVE_PATHS.make_dirs()
 
     parser = get_parser()

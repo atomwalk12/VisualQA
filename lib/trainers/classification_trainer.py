@@ -7,18 +7,29 @@ from peft import LoraConfig
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import BitsAndBytesConfig
-
+import numpy as np
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.preprocessing import label_binarize
+import torch.nn.functional as F
 import wandb
 from config import Repositories
-
+import numpy as np
+from sklearn.metrics import hamming_loss, jaccard_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
+from sklearn.model_selection import cross_val_score
 from ..daquar.daquar_classification import DaquarClassification
 from ..easy_vqa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2, Blip2ClassifierConfig
 from ..models.blip2_base_classifier import Blip2BaseClassifier
 from ..models.blip2_classifier import Blip2Classifier
 from ..representations import ModelFactory, ModelTypes
-from ..types import SAVE_PATHS, DatasetTypes, FileNames, TrainingParameters
+from sklearn.metrics import classification_report
+from ..types import SAVE_PATHS, DatasetTypes, FileNames, Suffix, TrainingParameters
 from .base_trainer import TorchBase
+from ..utils import ClassificationMetricsAccumulator
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +38,15 @@ class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
 
+        self.train_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Train)
+        self.val_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Val)
         self.update_frequency = 64
 
     def get_repository(self):
-        if self.model_name == ModelTypes.BLIP2BaseClassifier:
-            return Repositories.VQAClassificationBase
-        else:
-            return Repositories.VQAClassification
+        if self.dataset_name == DatasetTypes.EASY_VQA:
+            return Repositories.VQAClassificationEasyVQA
+        elif self.dataset_name == DatasetTypes.DAQUAR:
+            return Repositories.VQAClassificationDaquar
 
     def get_save_path(self):
         if self.dataset_name == DatasetTypes.DAQUAR:
@@ -74,12 +87,12 @@ class ClassificationTrainer(TorchBase):
 
         if model_name == ModelTypes.BLIP2BaseClassifier:
             config = Blip2ClassifierConfig(
-                classification_input_dim=5120, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim
+                classification_input_dim=5120, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim, dataset_name=self.dataset_name
             )
             model = Blip2BaseClassifier(config, model)
         elif model_name == ModelTypes.BLIP2Classifier:
             config = Blip2ClassifierConfig(
-                classification_input_dim=768, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim
+                classification_input_dim=768, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim, dataset_name=self.dataset_name
             )
             model = Blip2Classifier(config, model)
 
@@ -205,18 +218,30 @@ class ClassificationTrainer(TorchBase):
             )
         elif self.dataset_name == DatasetTypes.EASY_VQA:
             return LoraConfig(
-                r=8,
-                lora_alpha=16,
+                r=16,
+                lora_alpha=32,
                 lora_dropout=0.1,
                 target_modules="all-linear",
                 init_lora_weights="gaussian",
             )
 
-    def on_batch_processed(self, preds, targets):
-        # Get the predicted class with the highest probability
-        prediction = torch.argmax(preds.logits, dim=1)
+    def on_batch_processed(self, y_pred, y_true):
+        if self.dataset_name == DatasetTypes.EASY_VQA:
+            if self.model.training:
+                self.train_accumulator.log_multi_class_statistics(y_pred, y_true)
+            else:
+                self.val_accumulator.log_multi_class_statistics(y_pred, y_true)
+        elif self.dataset_name == DatasetTypes.DAQUAR:
+             if self.model.training:
+                 self.train_accumulator.log_multi_label_statistics(y_pred, y_true)
+             else:
+                 self.val_accumulator.log_multi_label_statistics(y_pred, y_true)   
 
-        for pred, label in zip(prediction, targets):
+    def generate_local_confusion_matrix(self, y_pred, y_true):
+        # Get the predicted class with the highest probability
+        prediction = torch.argmax(y_pred.logits, dim=1)
+
+        for pred, label in zip(prediction, y_true):
             # Check if the predicted class is one of the correct classes
             if label[pred] == 1:
                 self.state.history["confusion_predictions"].append(pred.item())
@@ -230,9 +255,23 @@ class ClassificationTrainer(TorchBase):
                 # Default to -1 if no label is found
                 chosen_label = next(iter(true_label), -1)
                 self.state.history["confusion_labels"].append(chosen_label)
-
+                
+                
     def on_best_epoch(self):
+        pass
+    
+    def save_confusion_matrix_state(self):
         self.state.save_state_to_file(self.best_path, file_name=FileNames.ConfusionMatrix.format(self.config.split))
 
         self.state.history["confusion_predictions"] = []
         self.state.history["confusion_labels"] = []
+
+    def on_epoch_end(self):
+        if self.dataset_name == DatasetTypes.EASY_VQA:
+            self.train_accumulator.log_confusion_matrix()
+            self.val_accumulator.log_confusion_matrix()
+            self.train_accumulator.report_multi_class_statistics()
+            self.val_accumulator.report_multi_class_statistics()
+        else: 
+            self.train_accumulator.report_multi_label_statistics()
+            self.val_accumulator.report_multi_label_statistics()

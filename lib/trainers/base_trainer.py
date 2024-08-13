@@ -78,7 +78,7 @@ class TorchBase(ABC):
                 config=config,
                 job_type="Train",
                 tags=[config.model_name],
-                name=f"{config.model_name}-baseline",
+                name=f"{config.model_name}-{self.dataset_name}-baseline",
                 anonymous="must",
             )
 
@@ -92,7 +92,7 @@ class TorchBase(ABC):
         self.optimizer = self.hyperparameters.optimizer
         self.scheduler = self.hyperparameters.scheduler
 
-        if not config.resume_state:
+        if not config._resume_state:
             self.state = State()
         else:
             self.state = State.load_state(self.best_path, FileNames.StateDictionary.format(config.split))
@@ -172,28 +172,8 @@ class TorchBase(ABC):
 
             wandb.log({"Epoch Train Loss": train_loss})
             wandb.log({"Epoch Valid Loss": val_loss})
-
-            # Save the best result
-            if val_loss <= best_epoch_loss:
-                print(f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})")
-                # Update best loss
-                best_epoch_loss = val_loss
-
-                # Log the statistics
-                self.run.summary["Best Loss"] = best_epoch_loss
-
-                # Store best weights
-                self.model.save_pretrained(self.best_path)
-
-                # Save the best model
-                logger.info(f"Saved model {self.best_path} --> {best_epoch_loss:.4f}")
-                self.on_best_epoch()
-
-                # Save a model file from the current directory
-                print(f"Model Saved{reset} --> {self.best_path}")
-            else:
-                logger.info(f"{val_loss=}")
-
+            self.on_epoch_end()
+            
             # Saving the epoch which is supposed to be the next
             self.save_trainer_state(
                 best_epoch_loss,
@@ -201,8 +181,35 @@ class TorchBase(ABC):
                 epoch + 1,
                 self.train_dataloader,
             )
+            
+            # Save the best result
+            if val_loss <= best_epoch_loss:
+                print(f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})")
+                # Update best loss
+                best_epoch_loss = val_loss
+            
+
+                # Log the statistics
+                self.run.summary["Best Loss"] = best_epoch_loss
+
+                # Store best weights
+                self.model.save_pretrained(self.best_path)
+                self.state.best_epoch_loss = best_epoch_loss
+
+                # Save the best model
+                logger.info(f"Saved model {self.best_path} --> {best_epoch_loss:.4f}")
+
+                # Save a model file from the current directory
+                print(f"Model Saved{reset} --> {self.best_path}")
+                
+                # Push to hub every time a better model is found
+                self.push_to_hub(self.model, self.processor)
+            else:
+                logger.info(f"{val_loss=}")
 
             print()
+            
+            
 
         end = time.time()
 
@@ -213,7 +220,7 @@ class TorchBase(ABC):
 
         # Load the best model
         model, processor = self.load_from_checkpoint(is_trainable=True)
-        self.push_to_hub(model, processor)
+        # self.push_to_hub(model, processor)
         print()
 
         # Release resources
@@ -277,6 +284,7 @@ class TorchBase(ABC):
 
                 epoch_loss = running_loss / dataset_size
 
+                wandb.log({'Train Epoch Loss': epoch_loss})
                 bar.set_postfix(
                     Epoch=epoch,
                     Train_Loss=epoch_loss,
@@ -322,6 +330,7 @@ class TorchBase(ABC):
                 # Now compute the final loss value
                 epoch_loss = running_loss / dataset_size
 
+                wandb.log({'Validation Epoch Loss': epoch_loss})
                 bar.set_postfix(
                     Epoch=epoch,
                     Valid_Loss=epoch_loss,
@@ -400,4 +409,8 @@ class TorchBase(ABC):
     
     @abstractmethod
     def on_best_epoch(self):
+        pass
+    
+    @abstractmethod
+    def on_epoch_end(self):
         pass

@@ -10,6 +10,8 @@ from transformers import Blip2Config
 
 import wandb
 
+from lib.types import DatasetTypes
+
 from .base_classifier import Blip2, Blip2ClassifierConfig
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,12 @@ class Blip2Classifier(Blip2):
         )
 
         self.classifier = nn.Linear(config.interm_dim, self.answer_space_dim)
-        self.criterion = nn.CrossEntropyLoss()
+        if self.config.dataset_name == DatasetTypes.EASY_VQA:
+            self.criterion = nn.CrossEntropyLoss()
+        elif self.config.dataset_name == DatasetTypes.DAQUAR:
+            self.criterion = nn.BCEWithLogitsLoss()
+        else:
+            raise KeyError()
 
     def forward(
         self,

@@ -46,7 +46,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--metric",
-        choices=[choice for choice in EvaluationMetrics],
+        choices=["umap"],
     )
     return parser
 
@@ -57,8 +57,6 @@ def main(args):
 
     if args.metric == EvaluationMetrics.UMAP:
         show_umap_clustering(args.split, args.dataset, num_samples=args.num_samples)
-    elif args.metric == EvaluationMetrics.ConfusionMatrix:
-        show_confusion_matrix(args.split, args.dataset)
 
 
 if __name__ == "__main__":

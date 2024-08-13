@@ -1,5 +1,6 @@
 import logging
 import pickle
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -11,7 +12,8 @@ import numpy as np
 import pandas as pd
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
-from transformers import Blip2ForConditionalGeneration, Blip2Model, Blip2Processor
+from transformers import (Blip2ForConditionalGeneration, Blip2Model,
+                          Blip2Processor)
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +199,19 @@ class TrainingParameters:
     use_wandb: bool = True
     split: str = None
     resume_state: bool = True
+    
+    @property
+    def _resume_state(self) -> int:
+        """Getter for my_property."""
+        if self.is_trainable and self.resume_checkpoint and not self._resume_state:
+            warnings.warn(f"Inconsistency detected: {self.is_trainable=}, {self.resume_checkpoint=}",
+                          f"and {self._resume_state=}. Setting _resume_state=True.")
+            return True
+        return self.resume_state
+
+    @_resume_state.setter
+    def _resume_state(self, value):
+        self.resume_state = value
 
     def __post_init__(self):
         if self.test_args is not None:
@@ -213,7 +228,7 @@ class TrainingParameters:
             f"  shuffle_train={self.shuffle_train}\n"
         )
 
-    num_epochs: int = 2
+    num_epochs: int = 200
     optimizer_name: str = "AdamW"
     scheduler_name: str = "CosineAnnealingLR"
     n_accumulate: int = 1
@@ -259,4 +274,7 @@ class BertScoreMetric(Metric):
             logger.info(f"val_bertscore_recall: {np.mean(scores["recall"])}")
             logger.info(f"val_bertscore_precision: {np.mean(scores["precision"])}")
             logger.info(f"val_bertscore_f1: {np.mean(scores["f1"])}")
+            logger.info(f"val_bertscore_precision: {np.mean(scores["precision"])}")
+            logger.info(f"val_bertscore_f1: {np.mean(scores["f1"])}")
+            
         return scores

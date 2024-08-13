@@ -6,7 +6,7 @@
 ### Fine tune a classifier
 To fine tune using a classification head use:
 ```python
-> python finetune.py --model blip2-classifier --dataset easy-vqa --train-split 'train[:500]' --val-split 'val[:200]'
+> python finetune.py --model blip2-classifier --dataset easy-vqa --train-split 'train' --val-split 'val'
 ```
 
 #### Test the classifier

@@ -49,7 +49,7 @@ def evaluate_model(args):
     )
     parameters = TrainingParameters(
         dataset_name=args.dataset,
-        resume_checkpoint=False,
+        resume_checkpoint=True,
         model_name=args.model,
         is_trainable=False,
         train_args=None,

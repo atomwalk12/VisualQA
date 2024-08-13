@@ -35,7 +35,7 @@ class EasyVQADatasetBase(DatabaseBase):
             questions = get_test_questions()
             images = get_test_image_paths()
 
-        dict = {
+        data_dict = {
             "question": questions[0],
             "answer": questions[1],
             "image_id": questions[2],
@@ -45,7 +45,8 @@ class EasyVQADatasetBase(DatabaseBase):
 
         # Needs a shuffle, otherwise the stratification doesn't work since after
         # filtering there will be too few entries from some classes.
-        raw_dataset = Dataset.from_dict(dict)
+        raw_dataset = Dataset.from_dict(data_dict)
+        raw_dataset.shuffle(seed=EXPERIMENT.get_seed())
 
         # Now filter the dataset based on the number of items requested
         split, start, end = parse_split_slicer(self.split)
@@ -69,6 +70,16 @@ class EasyVQADatasetBase(DatabaseBase):
             raw_dataset = ds[split if split == Suffix.Train else Suffix.Test]
 
             assert len(raw_dataset) == end - start
+        elif self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
+            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
+            ds = ds.class_encode_column("stratify_column").train_test_split(
+                test_size=0.2,
+                stratify_by_column="stratify_column",
+                seed=EXPERIMENT.get_seed(),
+                shuffle=True
+            )
+            raw_dataset = ds[split if split == Suffix.Train else Suffix.Test]
+            
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset

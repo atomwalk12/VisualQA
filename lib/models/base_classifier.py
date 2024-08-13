@@ -15,6 +15,7 @@ class Blip2ClassifierConfig(Blip2Config):
 
     def __init__(
         self,
+        dataset_name=None,
         answer_space_dim=None,
         classification_input_dim=0,
         base_model_name="blip2",
@@ -28,6 +29,7 @@ class Blip2ClassifierConfig(Blip2Config):
         self.classification_input_dim = classification_input_dim
         self.answer_space_dim = answer_space_dim
         self.save_embeddings = save_embeddings
+        self.dataset_name = dataset_name
 
 
 class Blip2(PreTrainedModel):

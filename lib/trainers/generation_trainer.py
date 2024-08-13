@@ -14,7 +14,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from nltk.translate.bleu_score import sentence_bleu
-from ..utils import MetricsAccumulator
+from ..utils import GeneratorMetricsAccumulator
 import wandb
 from config import Repositories
 
@@ -31,10 +31,14 @@ class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
         self.update_frequency = 64
-        self.metric_accumulator = MetricsAccumulator(self.processor.tokenizer)
+        self.train_accumulator = GeneratorMetricsAccumulator(self.processor.tokenizer, Suffix.Train)
+        self.val_accumulator =  GeneratorMetricsAccumulator(self.processor.tokenizer, Suffix.Val)
 
     def get_repository(self):
-        return Repositories.VQAGeneration
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            return Repositories.VQAGenerationDaquar
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            return Repositories.VQAGenerationEasyVQA
 
     def get_save_path(self):
         if self.dataset_name == DatasetTypes.DAQUAR:
@@ -168,18 +172,22 @@ class GenerationTrainer(TorchBase):
             )
         elif self.dataset_name == DatasetTypes.EASY_VQA:
             return LoraConfig(
-                r=8,
-                lora_alpha=16,
+                r=16,
+                lora_alpha=32,
                 lora_dropout=0.1,
                 target_modules="all-linear",
                 init_lora_weights="gaussian",
             )            
 
-    def on_batch_processed(self, outputs, labels):
-        training = Suffix.Train if self.model.training else Suffix.Val
-        metrics = self.metric_accumulator.get_metrics(outputs, labels, training)
-        wandb.log(metrics)
+    def on_batch_processed(self, outputs, labels):      
+        if self.model.training:
+            self.train_accumulator.log_metrics(outputs, labels)
+        else:
+            self.val_accumulator.log_metrics(outputs, labels)
 
     def on_best_epoch(self):
         pass
     
+    def on_epoch_end(self):
+        self.train_accumulator.report()
+        self.val_accumulator.report()
