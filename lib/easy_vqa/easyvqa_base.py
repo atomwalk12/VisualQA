@@ -46,7 +46,6 @@ class EasyVQADatasetBase(DatabaseBase):
         # Needs a shuffle, otherwise the stratification doesn't work since after
         # filtering there will be too few entries from some classes.
         raw_dataset = Dataset.from_dict(data_dict)
-        raw_dataset.shuffle(seed=EXPERIMENT.get_seed())
 
         # Now filter the dataset based on the number of items requested
         split, start, end = parse_split_slicer(self.split)

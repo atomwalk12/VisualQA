@@ -82,8 +82,9 @@ class DaquarDatasetBase(DatabaseBase):
             raw_dataset = filtered[split if split == Suffix.Train else Suffix.Test]
 
             assert len(raw_dataset) == end - start
-            
-        raw_dataset.shuffle(seed=EXPERIMENT.get_seed())
+        
+        if self.split.startswith(Suffix.Train):
+            raw_dataset.shuffle(seed=EXPERIMENT.get_seed())
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         
