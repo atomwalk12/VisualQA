@@ -5,6 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
+from typing import Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -12,11 +13,11 @@ from colorama import Fore, Style
 from sentence_transformers import SentenceTransformer, util
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import PreTrainedModel
+from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrainedModel
 
 import wandb
-from ..types import CustomDataset
-from ..types import FileNames, State, TrainingParameters, VQAParameters
+
+from ..types import CustomDataset, FileNames, State, TrainingParameters, VQAParameters
 from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time
 
 logger = logging.getLogger(__name__)
@@ -30,10 +31,10 @@ class TorchBase(ABC):
         self.model_name = config.model_name
         self.add_logger()
         self.dataset_name = config.dataset_name
-        
+
         # The path to store the best model
         self.best_path = self.get_save_path()
-        
+
         # Whether to register embeddings
         self.save_embeddings = False
 
@@ -99,7 +100,7 @@ class TorchBase(ABC):
             self.optimizer.load_state_dict(self.state.optimizer_state_dict)
             self.scheduler.load_state_dict(self.state.scheduler_state_dict)
 
-    def prepare_module(self):
+    def prepare_module(self) -> Tuple[Blip2ForConditionalGeneration, Blip2Processor]:
         params = self.config
         if self.resume_checkpoint:
             model, processor = self.load_from_checkpoint(is_trainable=params.is_trainable)
@@ -118,7 +119,6 @@ class TorchBase(ABC):
                 num_workers=params.num_train_workers,
             )
             self.answer_space = train_dataset.answer_space
-            
 
         if params.val_args is not None:
             params.val_args.processor = processor
@@ -173,7 +173,7 @@ class TorchBase(ABC):
             wandb.log({"Epoch Train Loss": train_loss})
             wandb.log({"Epoch Valid Loss": val_loss})
             self.on_epoch_end()
-            
+
             # Saving the epoch which is supposed to be the next
             self.save_trainer_state(
                 best_epoch_loss,
@@ -181,19 +181,19 @@ class TorchBase(ABC):
                 epoch + 1,
                 self.train_dataloader,
             )
-            
+
             # Save the best result
             if val_loss <= best_epoch_loss:
                 print(f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})")
                 # Update best loss
                 best_epoch_loss = val_loss
-            
 
                 # Log the statistics
                 self.run.summary["Best Loss"] = best_epoch_loss
 
                 # Store best weights
                 self.model.save_pretrained(self.best_path)
+                self.processor.save_pretrained(self.best_path)
                 self.state.best_epoch_loss = best_epoch_loss
 
                 # Save the best model
@@ -201,15 +201,13 @@ class TorchBase(ABC):
 
                 # Save a model file from the current directory
                 print(f"Model Saved{reset} --> {self.best_path}")
-                
+
                 # Push to hub every time a better model is found
                 self.push_to_hub(self.model, self.processor)
             else:
                 logger.info(f"{val_loss=}")
 
             print()
-            
-            
 
         end = time.time()
 
@@ -261,9 +259,9 @@ class TorchBase(ABC):
             if self.save_embeddings:
                 assert 3 == 4
                 self.update_state_with_embeddings(outputs)
-            
+
             self.on_batch_processed(outputs, labels)
-            
+
             # Now update the loss
             loss = outputs.loss
             loss = loss / n_accumulate
@@ -284,7 +282,7 @@ class TorchBase(ABC):
 
                 epoch_loss = running_loss / dataset_size
 
-                wandb.log({'Train Epoch Loss': epoch_loss})
+                wandb.log({"Train Epoch Loss": epoch_loss})
                 bar.set_postfix(
                     Epoch=epoch,
                     Train_Loss=epoch_loss,
@@ -320,7 +318,7 @@ class TorchBase(ABC):
                     attention_mask=attention_mask,
                 )
                 loss = outputs.loss
-                
+
                 self.on_batch_processed(outputs, labels)
 
                 # Accumulate the loss across multiple batches
@@ -330,7 +328,7 @@ class TorchBase(ABC):
                 # Now compute the final loss value
                 epoch_loss = running_loss / dataset_size
 
-                wandb.log({'Validation Epoch Loss': epoch_loss})
+                wandb.log({"Validation Epoch Loss": epoch_loss})
                 bar.set_postfix(
                     Epoch=epoch,
                     Valid_Loss=epoch_loss,
@@ -406,11 +404,11 @@ class TorchBase(ABC):
     @abstractmethod
     def on_batch_processed(self, preds, targets):
         pass
-    
+
     @abstractmethod
     def on_best_epoch(self):
         pass
-    
+
     @abstractmethod
     def on_epoch_end(self):
         pass

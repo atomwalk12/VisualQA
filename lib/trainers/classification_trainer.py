@@ -6,30 +6,20 @@ import torch.utils.checkpoint
 from peft import LoraConfig
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import BitsAndBytesConfig
-import numpy as np
-from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-from sklearn.preprocessing import label_binarize
-import torch.nn.functional as F
+from transformers import BitsAndBytesConfig, Blip2Processor
+
 import wandb
 from config import Repositories
-import numpy as np
-from sklearn.metrics import hamming_loss, jaccard_score, precision_score, recall_score, f1_score
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
-from sklearn.model_selection import cross_val_score
+
 from ..daquar.daquar_classification import DaquarClassification
 from ..easy_vqa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2, Blip2ClassifierConfig
 from ..models.blip2_base_classifier import Blip2BaseClassifier
 from ..models.blip2_classifier import Blip2Classifier
 from ..representations import ModelFactory, ModelTypes
-from sklearn.metrics import classification_report
 from ..types import SAVE_PATHS, DatasetTypes, FileNames, Suffix, TrainingParameters
-from .base_trainer import TorchBase
 from ..utils import ClassificationMetricsAccumulator
+from .base_trainer import TorchBase
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +45,13 @@ class ClassificationTrainer(TorchBase):
             return SAVE_PATHS.BLIP2_Classifier_EasyVQA
 
     def load_from_checkpoint(self, is_trainable):
-        base_model, processor = self.get_models(apply_lora=False)
+        base_model, _ = self.get_models(apply_lora=False)
 
         base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
         local_model_path = self.best_path
+        processor = Blip2Processor.from_pretrained(local_model_path)
+
         if self.model_name == ModelTypes.BLIP2Classifier:
             model = Blip2Classifier.from_pretrained(
                 base_model,
@@ -87,12 +79,18 @@ class ClassificationTrainer(TorchBase):
 
         if model_name == ModelTypes.BLIP2BaseClassifier:
             config = Blip2ClassifierConfig(
-                classification_input_dim=5120, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim, dataset_name=self.dataset_name
+                classification_input_dim=5120,
+                save_embeddings=self.save_embeddings,
+                answer_space_dim=answer_space_dim,
+                dataset_name=self.dataset_name,
             )
             model = Blip2BaseClassifier(config, model)
         elif model_name == ModelTypes.BLIP2Classifier:
             config = Blip2ClassifierConfig(
-                classification_input_dim=768, save_embeddings=self.save_embeddings, answer_space_dim=answer_space_dim, dataset_name=self.dataset_name
+                classification_input_dim=768,
+                save_embeddings=self.save_embeddings,
+                answer_space_dim=answer_space_dim,
+                dataset_name=self.dataset_name,
             )
             model = Blip2Classifier(config, model)
 
@@ -232,10 +230,10 @@ class ClassificationTrainer(TorchBase):
             else:
                 self.val_accumulator.log_multi_class_statistics(y_pred, y_true)
         elif self.dataset_name == DatasetTypes.DAQUAR:
-             if self.model.training:
-                 self.train_accumulator.log_multi_label_statistics(y_pred, y_true)
-             else:
-                 self.val_accumulator.log_multi_label_statistics(y_pred, y_true)   
+            if self.model.training:
+                self.train_accumulator.log_multi_label_statistics(y_pred, y_true)
+            else:
+                self.val_accumulator.log_multi_label_statistics(y_pred, y_true)
 
     def generate_local_confusion_matrix(self, y_pred, y_true):
         # Get the predicted class with the highest probability
@@ -255,11 +253,10 @@ class ClassificationTrainer(TorchBase):
                 # Default to -1 if no label is found
                 chosen_label = next(iter(true_label), -1)
                 self.state.history["confusion_labels"].append(chosen_label)
-                
-                
+
     def on_best_epoch(self):
         pass
-    
+
     def save_confusion_matrix_state(self):
         self.state.save_state_to_file(self.best_path, file_name=FileNames.ConfusionMatrix.format(self.config.split))
 
@@ -272,6 +269,6 @@ class ClassificationTrainer(TorchBase):
             self.val_accumulator.log_confusion_matrix()
             self.train_accumulator.report_multi_class_statistics()
             self.val_accumulator.report_multi_class_statistics()
-        else: 
+        else:
             self.train_accumulator.report_multi_label_statistics()
             self.val_accumulator.report_multi_label_statistics()

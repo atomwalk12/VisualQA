@@ -16,6 +16,7 @@ import numpy as np
 from nltk.translate.bleu_score import sentence_bleu
 from ..utils import GeneratorMetricsAccumulator
 import wandb
+from transformers import Blip2Processor
 from config import Repositories
 
 from ..daquar.daquar_generation import DaquarGeneration
@@ -47,11 +48,13 @@ class GenerationTrainer(TorchBase):
             return SAVE_PATHS.BLIP2_Generator_EasyVQA
 
     def load_from_checkpoint(self, is_trainable):
-        base_model, processor = self.get_models(apply_lora=False)
+        base_model, _ = self.get_models(apply_lora=False)
 
         base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
         local_model_path = self.best_path
+
+        processor = Blip2Processor.from_pretrained(local_model_path)
         model = PeftModel.from_pretrained(
             base_model,
             local_model_path,
