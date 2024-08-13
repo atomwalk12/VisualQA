@@ -203,9 +203,7 @@ class TrainingParameters:
     @property
     def _resume_state(self) -> int:
         """Getter for my_property."""
-        if self.is_trainable and self.resume_checkpoint and not self._resume_state:
-            warnings.warn(f"Inconsistency detected: {self.is_trainable=}, {self.resume_checkpoint=}",
-                          f"and {self._resume_state=}. Setting _resume_state=True.")
+        if self.is_trainable and self.resume_checkpoint and not self.resume_state:
             return True
         return self.resume_state
 

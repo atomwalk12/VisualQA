@@ -73,12 +73,15 @@ class TorchBase(ABC):
         self.sbert = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
         if config.use_wandb:
+            resume_wandb = "must" if self.resume_checkpoint else "allow"
             # Setup wandb and log model properties
             self.run = wandb.init(
                 project=config.wandb_project,
                 config=config,
                 job_type="Train",
                 tags=[config.model_name],
+                id=f"{config.model_name}-{self.dataset_name}-baseline",
+                resume=resume_wandb,
                 name=f"{config.model_name}-{self.dataset_name}-baseline",
                 anonymous="must",
             )
@@ -174,19 +177,19 @@ class TorchBase(ABC):
             wandb.log({"Epoch Valid Loss": val_loss})
             self.on_epoch_end()
 
-            # Saving the epoch which is supposed to be the next
-            self.save_trainer_state(
-                best_epoch_loss,
-                history,
-                epoch + 1,
-                self.train_dataloader,
-            )
 
             # Save the best result
             if val_loss <= best_epoch_loss:
                 print(f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})")
                 # Update best loss
                 best_epoch_loss = val_loss
+                # Saving the epoch which is supposed to be the next
+                self.save_trainer_state(
+                    best_epoch_loss,
+                    history,
+                    epoch + 1,
+                    self.train_dataloader,
+                )
 
                 # Log the statistics
                 self.run.summary["Best Loss"] = best_epoch_loss
@@ -206,6 +209,14 @@ class TorchBase(ABC):
                 self.push_to_hub(self.model, self.processor)
             else:
                 logger.info(f"{val_loss=}")
+
+                # Saving the epoch which is supposed to be the next
+                self.save_trainer_state(
+                    best_epoch_loss,
+                    history,
+                    epoch + 1,
+                    self.train_dataloader,
+                )
 
             print()
 
