@@ -35,7 +35,7 @@ class Blip2ClassifierConfig(Blip2Config):
 class Blip2(PreTrainedModel):
     model: PreTrainedModel
     config_class: Blip2Config
-    interm_layer: Module
+    classifier: Module
 
     def __init__(self, config: Blip2ClassifierConfig):
         super().__init__(config)
@@ -51,7 +51,7 @@ class Blip2(PreTrainedModel):
 
         # Save the additional layer
         additional_layer_path = os.path.join(output_path, "classification_layer.pt")
-        torch.save(self.interm_layer.state_dict(), additional_layer_path)
+        torch.save(self.classifier.state_dict(), additional_layer_path)
 
     @classmethod
     def from_pretrained(
@@ -80,7 +80,7 @@ class Blip2(PreTrainedModel):
         # Load the additional layer
         additional_layer_path = os.path.join(pretrained_model_name_or_path, "classification_layer.pt")
         if os.path.exists(additional_layer_path):
-            model.interm_layer.load_state_dict(torch.load(additional_layer_path))
+            model.classifier.load_state_dict(torch.load(additional_layer_path))
 
         return model
 

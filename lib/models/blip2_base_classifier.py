@@ -35,13 +35,13 @@ class Blip2BaseClassifier(Blip2):
         self.peft_config: Blip2Config = peft_model.peft_config
         self.answer_space = config.answer_space_dim
 
-        self.interm_layer = nn.Sequential(
+        self.classifier = nn.Sequential(
             nn.Linear(config.classification_input_dim, config.interm_dim),  # 32 x 768
             nn.ReLU(),
             nn.Dropout(0.5),
+            nn.Linear(config.interm_dim, len(self.answer_space))
         )
 
-        self.classifier = nn.Linear(config.interm_dim, len(self.answer_space))
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(
@@ -59,8 +59,7 @@ class Blip2BaseClassifier(Blip2):
         features = torch.cat((language_features, text_features), dim=1)
 
         # Classification
-        interm_output = self.interm_layer(features)
-        logits = self.classifier(interm_output)
+        logits = self.classifier(features)
 
         outputs = Result()
         if labels is not None:

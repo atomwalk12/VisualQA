@@ -32,13 +32,13 @@ class Blip2Classifier(Blip2):
         self.peft_config: Blip2Config = peft_model.peft_config
         self.answer_space_dim = config.answer_space_dim
 
-        self.interm_layer = nn.Sequential(
+        self.classifier = nn.Sequential(
             nn.Linear(config.classification_input_dim, config.interm_dim),  # 32 x 768
             nn.ReLU(),
             nn.Dropout(0.5),
+            nn.Linear(config.interm_dim, self.answer_space_dim),
         )
 
-        self.classifier = nn.Linear(config.interm_dim, self.answer_space_dim)
         if self.config.dataset_name == DatasetTypes.EASY_VQA:
             self.criterion = nn.CrossEntropyLoss()
         elif self.config.dataset_name == DatasetTypes.DAQUAR:
@@ -64,8 +64,7 @@ class Blip2Classifier(Blip2):
         features = outputs.qformer_outputs["pooler_output"]
 
         # Classification
-        interm_output = self.interm_layer(features)
-        logits = self.classifier(interm_output)
+        logits = self.classifier(features)
 
         wandb.log({"Base Model Batch Loss": outputs.loss.item()})
         if labels is not None:
