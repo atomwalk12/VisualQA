@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 import logging
 from pathlib import Path
+import random
 
 import torch
 import torch.nn.functional as F
@@ -290,3 +292,37 @@ class GeneratorMetricsAccumulator:
         targets_expanded = targets.unsqueeze(-1).expand_as(top_k_indices)
         correct = (top_k_indices == targets_expanded).sum(dim=-1)
         return (correct > 0).float().mean()
+
+
+def read_wandb_id(file):
+    with open(file, 'r') as file:
+        # Read the content of the file
+        content = file.read().strip()
+
+        # Convert the content to an integer
+        number = int(content.split(' ')[-1])
+        return number
+
+
+@contextmanager
+def without_seed():
+    # Save the current state
+    state = random.getstate()
+    
+    try:
+        # Temporarily ignore the seed (use system randomness)
+        random.seed(None)
+        yield
+    finally:
+        # Restore the original state
+        random.setstate(state)
+
+def write_wandb_id(file):
+    with without_seed():
+        id = random.randint(0, np.iinfo(np.int32).max)
+    
+    with open(file, 'a') as file:
+        # Read the content of the file
+        file.write(str(f"{id} "))
+        file.close()
+    return id

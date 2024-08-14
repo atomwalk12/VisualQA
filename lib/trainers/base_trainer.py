@@ -18,7 +18,7 @@ from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrain
 import wandb
 
 from ..types import CustomDataset, FileNames, State, TrainingParameters, VQAParameters
-from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time
+from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time, read_wandb_id, write_wandb_id
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +73,19 @@ class TorchBase(ABC):
         self.sbert = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
         if config.use_wandb:
-            resume_wandb = "must" if self.resume_checkpoint else "allow"
+            resume_wandb = "must" if self.resume_checkpoint else "never"
+            if self.resume_checkpoint:
+                wandb_id = read_wandb_id(f"{self.best_path}/wandb_run.txt")
+            else:
+                wandb_id = write_wandb_id(f"{self.best_path}/wandb_run.txt")
+                
             # Setup wandb and log model properties
             self.run = wandb.init(
                 project=config.wandb_project,
                 config=config,
                 job_type="Train",
                 tags=[config.model_name],
-                id=f"{config.model_name}-{self.dataset_name}-baseline",
+                id=f"{config.model_name}-{self.dataset_name}-baseline-{wandb_id}",
                 resume=resume_wandb,
                 name=f"{config.model_name}-{self.dataset_name}-baseline",
                 anonymous="must",

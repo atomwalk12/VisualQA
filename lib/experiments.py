@@ -26,6 +26,8 @@ class Reproducible:
 
         torch.cuda.manual_seed(self.seed)
         torch.manual_seed(self.seed)
+        numpy.random.seed(self.seed)
+        random.seed(self.seed)
 
     def get_seed(self):
         return self.seed
@@ -41,5 +43,5 @@ class Reproducible:
 
     def get_generator(self):
         g = torch.Generator()
-        g.manual_seed(0)
+        g.manual_seed(self.seed)
         return g
