@@ -199,6 +199,8 @@ class TrainingParameters:
     use_wandb: bool = True
     split: str = None
     resume_state: bool = True
+    lora_config = None
+    bnb_config = None
     
     @property
     def _resume_state(self) -> int:

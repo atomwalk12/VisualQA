@@ -31,9 +31,17 @@ class TorchBase(ABC):
         self.model_name = config.model_name
         self.add_logger()
         self.dataset_name = config.dataset_name
-
-        # The path to store the best model
+        self.resume_checkpoint = config.resume_checkpoint
         self.best_path = self.get_save_path()
+        
+        if config.use_wandb:
+            if self.resume_checkpoint:
+                wandb_id = read_wandb_id(f"{self.best_path}/wandb_run.txt")
+            else:
+                wandb_id = write_wandb_id(f"{self.best_path}/wandb_run.txt")
+                
+        # The path to store the best model
+        self.best_path = self.best_path + f"/{str(wandb_id)}"
 
         # Whether to register embeddings
         self.save_embeddings = False
@@ -60,12 +68,14 @@ class TorchBase(ABC):
 
         # Save the configuration
         self.config = config
+        self.config.lora_config = self.lora_config()
+        self.config.bnb_config = self.bnb_config()
 
         # Check whether a CUDA is available
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Prepare the module for training
-        self.resume_checkpoint = config.resume_checkpoint
+        
         self.model, self.processor = self.prepare_module()
         self.model.to(self.device)
 
@@ -74,11 +84,7 @@ class TorchBase(ABC):
 
         if config.use_wandb:
             resume_wandb = "must" if self.resume_checkpoint else "never"
-            if self.resume_checkpoint:
-                wandb_id = read_wandb_id(f"{self.best_path}/wandb_run.txt")
-            else:
-                wandb_id = write_wandb_id(f"{self.best_path}/wandb_run.txt")
-                
+
             # Setup wandb and log model properties
             self.run = wandb.init(
                 project=config.wandb_project,
