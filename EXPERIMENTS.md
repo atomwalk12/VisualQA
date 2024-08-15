@@ -24,7 +24,7 @@ To generate the confusion matrix run:
 ### Fine tune a token generator
 To fine tune only the generator without a classification head use:
 ```python
-> python finetune.py --model blip2-generator --dataset easy-vqa --train-split 'train[:1000]' --val-split 'val[:200]'
+> python finetune.py --model blip2-generator --dataset easy-vqa --train-split train --val-split val
 ```
 
 There are no confusion matrices here, but multiple assessment metrics are used: perplexity, token_level_accuracy, adapted_bleu_score, entropy_of_predictions, top_5_accuracy.

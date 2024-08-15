@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
 from sklearn.metrics import accuracy_score, classification_report, hamming_loss, jaccard_score
-
+from sentence_transformers import util
 import wandb
 from lib.experiments import Reproducible
 
@@ -202,14 +202,34 @@ class ClassificationMetricsAccumulator:
 class GeneratorMetricsAccumulator:
     update_frequency = 16
 
-    def __init__(self, tokenizer, name):
+    def __init__(self, tokenizer, sbert, name):
         self.tokenizer = tokenizer
         self.iteration = 0
         self.accumulated_predictions = []
         self.accumulated_targets = []
         self.accumulated_loss = []
         self.name = name
+        self.sbert = sbert
 
+    def sbert_similarity(self, logits, _targets):
+
+        # Convert logits to predicted token indices: shape: (batch_size, sequence_length)
+        predictions = torch.argmax(logits, dim=-1) 
+        
+        # Decode predictions and targets into sentences
+        sentences1 = self.tokenizer.batch_decode(predictions, skip_special_tokens=True)
+        sentences2 = self.tokenizer.batch_decode(_targets, skip_special_tokens=True)
+        
+        # Encode sentences into embeddings
+        embeddings1 = self.sbert.encode(sentences1, convert_to_tensor=True)
+        embeddings2 = self.sbert.encode(sentences2, convert_to_tensor=True)
+        
+        # Calculate cosine similarity between embeddings
+        cosine_scores = util.pytorch_cos_sim(embeddings1, embeddings2)
+        
+        # Average the cosine scores across the batch dimension
+        return cosine_scores.mean().item()
+    
     def log_metrics(self, outputs, labels):
         loss = outputs.loss.clone().detach().cpu()
         predictions = outputs.logits.clone().detach().cpu()
@@ -230,6 +250,7 @@ class GeneratorMetricsAccumulator:
             f"{self.name}_loss": 0.0,
             f"{self.name}_perplexity": 0.0,
             f"{self.name}_bleu": 0.0,
+            f"{self.name}_sbert_similarity": 0.0,
             f"{self.name}_token_accuracy": 0.0,
             f"{self.name}_entropy": 0.0,
             f"{self.name}_top_5_accuracy": 0.0,
@@ -239,6 +260,7 @@ class GeneratorMetricsAccumulator:
         for loss, target, prediction in zip(accumulated_loss, targets, predictions):
             metrics = {
                 f"{self.name}_loss": loss.item(),
+                f"{self.name}_sbert_similarity": self.sbert_similarity(prediction, target),
                 f"{self.name}_perplexity": self.calculate_perplexity(loss).item(),
                 f"{self.name}_bleu": self.adapted_bleu_score(prediction, target),
                 f"{self.name}_token_accuracy": self.token_level_accuracy(prediction, target).item(),
@@ -276,11 +298,28 @@ class GeneratorMetricsAccumulator:
 
     def adapted_bleu_score(self, logits, targets):
         smoothing = SmoothingFunction().method1
-
-        predictions = torch.argmax(logits, dim=-1)
-        pred_text = self.tokenizer.decode(predictions[0])
-        target_text = self.tokenizer.decode(targets[0])
-        return sentence_bleu([target_text.split()], pred_text.split(), smoothing_function=smoothing, weights=(0.5, 0.5))
+        batch_size = logits.size(0)
+        
+        bleu_scores = []
+        
+        # Convert logits to predicted token indices
+        predictions = torch.argmax(logits, dim=-1)  # shape: (batch_size, sequence_length)
+        
+        for i in range(batch_size):
+            pred_text = self.tokenizer.decode(predictions[i], skip_special_tokens=True)
+            target_text = self.tokenizer.decode(targets[i], skip_special_tokens=True)
+            
+            # Calculate BLEU score
+            bleu_score = sentence_bleu(
+                [target_text.split()], 
+                pred_text.split(), 
+                smoothing_function=smoothing, 
+                weights=(0.5, 0.5)
+            )
+            bleu_scores.append(bleu_score)
+        
+        # Return the average BLEU score across the batch
+        return sum(bleu_scores) / len(bleu_scores)
 
     def entropy_of_predictions(self, logits):
         probs = F.softmax(logits, dim=-1)
@@ -290,8 +329,8 @@ class GeneratorMetricsAccumulator:
     def top_k_accuracy(self, logits, targets, k=5):
         _, top_k_indices = torch.topk(logits, k, dim=-1)
         targets_expanded = targets.unsqueeze(-1).expand_as(top_k_indices)
-        correct = (top_k_indices == targets_expanded).sum(dim=-1)
-        return (correct > 0).float().mean()
+        correct = (top_k_indices == targets_expanded).any(dim=-1).float()
+        return correct.mean()
 
 
 def read_wandb_id(file):

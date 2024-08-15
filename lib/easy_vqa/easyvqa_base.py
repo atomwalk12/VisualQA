@@ -40,7 +40,7 @@ class EasyVQADatasetBase(DatabaseBase):
             "answer": questions[1],
             "image_id": questions[2],
             "image_path": [images[image_id] for image_id in questions[2]],
-            "image": [Image.open(images[image_id]) for image_id in questions[2]],
+            "image": [Image.open(images[image_id]).copy() for image_id in questions[2]],
         }
 
         # Needs a shuffle, otherwise the stratification doesn't work since after
@@ -98,7 +98,7 @@ class EasyVQADatasetBase(DatabaseBase):
             "answer": questions[1],
             "image_id": questions[2],
             "image_path": [images[image_id] for image_id in questions[2]],
-            "image": [Image.open(images[image_id]) for image_id in questions[2]],
+            "image": [Image.open(images[image_id]).copy() for image_id in questions[2]],
         }
 
         raw_dataset = Dataset.from_dict(dict)

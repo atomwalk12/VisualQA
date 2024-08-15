@@ -32,8 +32,8 @@ class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
         self.update_frequency = 64
-        self.train_accumulator = GeneratorMetricsAccumulator(self.processor.tokenizer, Suffix.Train)
-        self.val_accumulator =  GeneratorMetricsAccumulator(self.processor.tokenizer, Suffix.Val)
+        self.train_accumulator = GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Train)
+        self.val_accumulator =  GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Val)
 
     def get_repository(self):
         if self.dataset_name == DatasetTypes.DAQUAR:
