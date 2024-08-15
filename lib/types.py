@@ -88,6 +88,10 @@ class SAVE_PATHS(StrEnum):
         Path(SAVE_PATHS.BLIP2_Classifier_EasyVQA).mkdir(parents=True, exist_ok=True)
         Path(SAVE_PATHS.BLIP2_Generator_DAQUAR).mkdir(parents=True, exist_ok=True)
         Path(SAVE_PATHS.BLIP2_Classifier_DAQUAR).mkdir(parents=True, exist_ok=True)
+    
+    @staticmethod
+    def make_dir(dir):
+        Path(dir).mkdir(parents=True, exist_ok=True)
 
 
 class CustomDataset(Dataset, ABC):

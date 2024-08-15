@@ -17,7 +17,7 @@ from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrain
 
 import wandb
 
-from ..types import CustomDataset, FileNames, State, TrainingParameters, VQAParameters
+from ..types import SAVE_PATHS, CustomDataset, FileNames, State, TrainingParameters, VQAParameters
 from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time, read_wandb_id, write_wandb_id
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class TorchBase(ABC):
                 
         # The path to store the best model
         self.best_path = self.best_path + f"/{str(wandb_id)}"
+        SAVE_PATHS.make_dir(self.best_path)
 
         # Whether to register embeddings
         self.save_embeddings = False
@@ -83,7 +84,7 @@ class TorchBase(ABC):
         self.sbert = SentenceTransformer("paraphrase-MiniLM-L6-v2")
 
         if config.use_wandb:
-            resume_wandb = "must" if self.resume_checkpoint else "never"
+            resume_wandb = "allow" if self.resume_checkpoint else "never"
 
             # Setup wandb and log model properties
             self.run = wandb.init(
