@@ -28,7 +28,7 @@ class DaquarClassification(DaquarDatasetBase):
             digit = self.answers_to_id[label]
             one_hot_label = F.one_hot(torch.tensor(digit), len(self.answer_space))
             multi_hot_label += one_hot_label
-
+        multi_hot_label = multi_hot_label.clamp(0, 1)
 
         return {"prompt": prompt, "label": multi_hot_label}
 

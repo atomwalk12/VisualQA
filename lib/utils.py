@@ -99,8 +99,11 @@ class ClassificationMetricsAccumulator:
         self.accumulated_predictions = []
 
     def generate_report(self, targets, predictions, multi_label):
-        # Classification report
-        report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True)
+        if multi_label:
+            report = classification_report(targets, predictions, output_dict=True)
+        else:
+            # Classification report
+            report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True)
 
         # Extract relevant metrics from the classification report
         precision_macro = report["macro avg"]["precision"]

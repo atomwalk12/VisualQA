@@ -14,6 +14,7 @@ from sentence_transformers import SentenceTransformer, util
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrainedModel
+from peft import LoraConfig
 
 import wandb
 
@@ -48,7 +49,7 @@ class TorchBase(ABC):
         self.save_embeddings = False
 
         self.update_frequency = 64
-        self.lora = self.lora_config()
+        self.lora: LoraConfig = self.lora_config()
         self.bnb = self.bnb_config()
 
         # Log configurations
@@ -91,7 +92,7 @@ class TorchBase(ABC):
                 project=config.wandb_project,
                 config=config,
                 job_type="Train",
-                tags=[config.model_name],
+                tags=[config.model_name, f"rank_{self.lora.r}", f"lora_alpha_{self.lora.lora_alpha}"],
                 id=f"{config.model_name}-{self.dataset_name}-baseline-{wandb_id}",
                 resume=resume_wandb,
                 name=f"{config.model_name}-{self.dataset_name}-baseline",

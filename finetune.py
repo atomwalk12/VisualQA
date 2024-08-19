@@ -111,7 +111,7 @@ def main(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore")
+    # warnings.filterwarnings("ignore")
     SAVE_PATHS.make_dirs()
 
     parser = get_parser()

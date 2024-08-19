@@ -167,16 +167,16 @@ class GenerationTrainer(TorchBase):
         """Create a LoraConfig for PEFT."""
         if self.dataset_name == DatasetTypes.DAQUAR:
             return LoraConfig(
-                r=32,
-                lora_alpha=64,
+                r=8,
+                lora_alpha=8,
                 lora_dropout=0.1,
                 target_modules="all-linear",
                 init_lora_weights="gaussian",
             )
         elif self.dataset_name == DatasetTypes.EASY_VQA:
             return LoraConfig(
-                r=16,
-                lora_alpha=32,
+                r=8,
+                lora_alpha=8,
                 lora_dropout=0.1,
                 target_modules="all-linear",
                 init_lora_weights="gaussian",

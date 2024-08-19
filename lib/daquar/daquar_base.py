@@ -42,11 +42,17 @@ class DaquarDatasetBase(DatabaseBase):
         elif self.split.startswith(Suffix.Val) or self.split.startswith(Suffix.Test):
             dataset = self.get_test_questions()['val']
 
+        images = []
+        for item in dataset:
+            img = Image.open(f"{DatasetPath.DAQUAR}/images/{item['image_id']}.png")
+            images.append(img)
+            img.close()
+
         dict = {
             "question": dataset["question"],
             "answer": [answer.replace(" ", "").split(",") for answer in dataset['answer']],
             "image_id": dataset["image_id"],
-            "image": [Image.open(f"{DatasetPath.DAQUAR}/images/{item['image_id']}.png") for item in dataset],
+            "image": images,
         }
 
         # Needs a shuffle, otherwise the stratification doesn't work since after
@@ -98,4 +104,4 @@ class DaquarDatasetBase(DatabaseBase):
         pass
 
     def get_padding_max_length(self):
-        return 40
+        return 50

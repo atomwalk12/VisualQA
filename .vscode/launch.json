@@ -66,9 +66,9 @@
                 "--dataset",
                 "easy-vqa",
                 "--train-split",
-                "train[:300]",
+                "train",
                 "--val-split",
-                "val[:200]",
+                "val",
                 // "--resume-training"
             ]
         },
@@ -123,9 +123,9 @@
                 "--dataset",
                 "daquar",
                 "--train-split",
-                "train[:80]",
+                "train",
                 "--val-split",
-                "train[:80]",
+                "val",
                 //"--resume-training"
             ]
         },
@@ -175,9 +175,9 @@
                 "--dataset",
                 "daquar",
                 "--train-split",
-                "train[:150]",
+                "train",
                 "--val-split",
-                "val[:150]",
+                "val",
                 // "--resume-training"
             ]
         },
