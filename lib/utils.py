@@ -57,9 +57,8 @@ def format_time(seconds):
 
 
 class ClassificationMetricsAccumulator:
-    update_frequency = 16
 
-    def __init__(self, dataset_name, answer_space, name):
+    def __init__(self, dataset_name, answer_space, name, update_frequency):
         self.dataset_name = dataset_name
         self.accumulated_targets = []
         self.accumulated_predictions = []
@@ -69,6 +68,7 @@ class ClassificationMetricsAccumulator:
         self.answer_space = answer_space
         self.epoch = 0
         self.name = name
+        self.update_frequency = update_frequency
 
     def log_multi_class_statistics(self, y_pred, y_true):
         logits = y_pred.logits.clone().detach().cpu()
@@ -100,10 +100,10 @@ class ClassificationMetricsAccumulator:
 
     def generate_report(self, targets, predictions, multi_label):
         if multi_label:
-            report = classification_report(targets, predictions, output_dict=True)
+            report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True, zero_division=0.0)
         else:
             # Classification report
-            report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True)
+            report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True, zero_division=0.0)
 
         # Extract relevant metrics from the classification report
         precision_macro = report["macro avg"]["precision"]
@@ -165,7 +165,7 @@ class ClassificationMetricsAccumulator:
 
             # Multi-label statistics
             hamming_loss_value = hamming_loss(targets, predictions)
-            jaccard = jaccard_score(targets, predictions, zero_division=0, labels=np.unique(predictions),average="macro")
+            jaccard = jaccard_score(targets, predictions, zero_division=0.0, labels=np.unique(predictions),average="macro")
             accuracy = accuracy_score(targets, predictions)
 
             report[f"{self.name}_hamming_loss"] = hamming_loss_value
@@ -203,9 +203,8 @@ class ClassificationMetricsAccumulator:
 
 
 class GeneratorMetricsAccumulator:
-    update_frequency = 16
 
-    def __init__(self, tokenizer, sbert, name):
+    def __init__(self, tokenizer, sbert, name, update_frequency):
         self.tokenizer = tokenizer
         self.iteration = 0
         self.accumulated_predictions = []
@@ -213,6 +212,7 @@ class GeneratorMetricsAccumulator:
         self.accumulated_loss = []
         self.name = name
         self.sbert = sbert
+        self.update_frequency = update_frequency
 
     def sbert_similarity(self, logits, _targets):
 

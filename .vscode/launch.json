@@ -16,9 +16,9 @@
                 "--dataset",
                 "easy-vqa",
                 "--train-split",
-                "train[:100]",
+                "train",
                 "--val-split",
-                "val[:100]",
+                "val",
                 //"--resume-training"
             ]
         },

@@ -28,8 +28,8 @@ class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
 
-        self.train_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Train)
-        self.val_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Val)
+        self.train_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Train, update_frequency=16)
+        self.val_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1)
         self.update_frequency = 64
 
     def get_repository(self):
@@ -224,6 +224,15 @@ class ClassificationTrainer(TorchBase):
             )
 
     def on_batch_processed(self, y_pred, y_true):
+        # TODO[RF] gradients and weights
+        # # Log weights (corrected)
+        # for name, param in self.model.classifier.named_parameters():
+        #     wandb.log({f"weights/{name}": wandb.Histogram(param.detach().cpu().numpy())})
+
+        # # Log gradients (already handled correctly)
+        # for name, param in self.model.classifier.named_parameters():
+        #     if param.grad is not None:
+        #         wandb.log({f"gradients/{name}": wandb.Histogram(param.grad.detach().cpu().numpy())})
         if self.dataset_name == DatasetTypes.EASY_VQA:
             if self.model.training:
                 self.train_accumulator.log_multi_class_statistics(y_pred, y_true)

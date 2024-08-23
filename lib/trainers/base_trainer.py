@@ -284,13 +284,13 @@ class TorchBase(ABC):
                 assert 3 == 4
                 self.update_state_with_embeddings(outputs)
 
-            self.on_batch_processed(outputs, labels)
 
             # Now update the loss
             loss = outputs.loss
             loss = loss / n_accumulate
             loss.backward()
 
+            self.on_batch_processed(outputs, labels)        
             # Now perform the optimizer step only when step is a multiple of n_accumulate
             if (step + 1) % n_accumulate == 0:
                 self.optimizer.step()
