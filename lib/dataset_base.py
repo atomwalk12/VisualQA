@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 
 class DatabaseBase(CustomDataset, ABC):
     raw_dataset: Dataset = None
+    set_difference: Dataset = None
     _dataset: Dataset = None
     padding_max_length: int
+    answers_to_id: [] = None
+    id_to_answer: [] = None
 
     def __init__(self, dataset_name: DatasetTypes, params: VQAParameters):
         super().__init__(params.split)
@@ -27,35 +30,42 @@ class DatabaseBase(CustomDataset, ABC):
         self.padding_max_length = self.get_padding_max_length()
         
         self.min_class_size = 50
-
+        
+        # Store the answer space for commodity
+        self.answer_space = self._get_answers()
+        
         # Store parameters
         self.processor = params.processor
         self.use_stratified_split = params.use_stratified_split
+        self.keep_infrequent = params.keep_infrequent
 
         # can be train or val
         self.split: str = params.split
 
-        # Store the answer space for commodity
-        self.answer_space = self._get_answers()
-
-        # Create mappings
-        self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
-        self.id_to_answer = {idx: answer for idx, answer in enumerate(self.answer_space)}
-
         # Load data
-        if params.load_from_disk:
+        if not params.recompute:
             self.load()
         else:
-            if self.use_stratified_split:
-                self.raw_dataset = self.initialize_stratified_raw()
-            else:
-                self.raw_dataset = self.initialize_raw()
-
-            self.initialize_for_training()
+            self.initialize_dataset()
 
         self.is_testing = params.is_testing
         self.use_raw_dataset = False
 
+    
+    def initialize_dataset(self):
+        # Prepare the dataset for training
+        if self.use_stratified_split:
+            self.raw_dataset = self.initialize_stratified_raw()
+        else:
+            self.raw_dataset = self.initialize_raw()
+            
+        # Create mappings
+        self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
+        self.id_to_answer = {idx: answer for idx, answer in enumerate(self.answer_space)}
+        
+        self.prepare_labels()
+        
+    
     @property
     def dataset(self):
         if self._dataset is None:
@@ -91,7 +101,7 @@ class DatabaseBase(CustomDataset, ABC):
         encoding = {k: v.squeeze() for k, v in encoding.items()}
         return item, encoding
 
-    def initialize_for_training(self):
+    def prepare_labels(self):
         """Prepare the dataset for training"""
 
         logger.info("Preparing data for training")
@@ -151,11 +161,7 @@ class DatabaseBase(CustomDataset, ABC):
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {complete_path}")
-            if self.use_stratified_split:
-                self.raw_dataset = self.initialize_stratified_raw()
-            else:
-                self.raw_dataset = self.initialize_raw()
-            self.initialize_for_training()
+            self.initialize_dataset()
             self.save()
 
     def get_make_complete_path(self, type):

@@ -10,7 +10,7 @@ from transformers import Blip2Config
 
 import wandb
 
-from .base_classifier import Blip2, Blip2ClassifierConfig
+from .base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,15 @@ class Result:
     logits = None
 
 
-class Blip2BaseClassifier(Blip2):
+class Blip2ClassifierExperiment4(Blip2BaseClassifier):
+    """This is the fourth classifier I used. The main idea is that I don't use the Blip2ForConditionalGeneration
+    model to get the features. Instead, I use the Blip2 model to get the features.
+    See https://huggingface.co/docs/transformers/model_doc/blip-2#transformers.Blip2Model
+
+    Args:
+        Blip2BaseClassifier: Configuration storing information about intermediary
+        dimensions and answer space.
+    """
     config_class = Blip2ClassifierConfig
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):
@@ -29,11 +37,11 @@ class Blip2BaseClassifier(Blip2):
 
         self.config = config
         self.model: PeftModel = peft_model
-
+        
         # 1408 + 2560
         # Fusion and final classification
         self.peft_config: Blip2Config = peft_model.peft_config
-        self.answer_space = config.answer_space_dim
+        self.answer_space = config.answer_space
 
         self.classifier = nn.Sequential(
             nn.Linear(config.classification_input_dim, config.interm_dim),  # 32 x 768
@@ -74,11 +82,6 @@ class Blip2BaseClassifier(Blip2):
         return outputs
 
     def get_img_embedding(self, images):
-        """
-        Turn a list of image inputs into tensor of embedding vectors
-        images should be of shape (batch_size, channels, height, width)
-        """
-
         # pass images through the vision model and then the qformer to get query-conditional image features
         # tuple (last_hidden_state, pooler_output)
         qformer_features = self.model.get_qformer_features(images)
@@ -92,11 +95,6 @@ class Blip2BaseClassifier(Blip2):
         return language_projections, qformer_features
 
     def get_text_embedding(self, texts):
-        """
-        Turn a list of text inputs into tensor of embedding vectors.
-        texts is a list of strings to embed.
-        """
-
         text_outputs = self.model.get_text_features(texts, output_hidden_states=True)
 
         # extract [CLS] embedding from last hidden state, shape (batch_size, hidden_size)

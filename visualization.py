@@ -7,7 +7,7 @@ import logging
 
 from lib.types import SAVE_PATHS, DatasetTypes, EvaluationMetrics, ModelTypes
 from lib.utils import EXPERIMENT
-from lib.visualization import show_confusion_matrix, show_umap_clustering
+from lib.visualization import check_label_distribution, show_umap_clustering
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def get_parser() -> argparse.ArgumentParser:
         required=True,
         help="The dataset to use",
     )
-    
+
     parser.add_argument(
         "--num-samples",
         type=int,
@@ -46,7 +46,7 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--metric",
-        choices=["umap"],
+        choices=[metric for metric in EvaluationMetrics],
     )
     return parser
 
@@ -57,6 +57,8 @@ def main(args):
 
     if args.metric == EvaluationMetrics.UMAP:
         show_umap_clustering(args.split, args.dataset, num_samples=args.num_samples)
+    elif args.metric == EvaluationMetrics.DATA_DISTRIBUTION:
+        check_label_distribution(args.dataset)
 
 
 if __name__ == "__main__":

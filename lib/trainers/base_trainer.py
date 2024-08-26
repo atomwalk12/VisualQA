@@ -10,13 +10,14 @@ from typing import Tuple
 import torch
 import torch.utils.checkpoint
 from colorama import Fore, Style
+from peft import LoraConfig
 from sentence_transformers import SentenceTransformer, util
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrainedModel
-from peft import LoraConfig
 
 import wandb
+from lib.representations import ModelFactory
 
 from ..types import SAVE_PATHS, CustomDataset, FileNames, State, TrainingParameters, VQAParameters
 from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time, read_wandb_id, write_wandb_id
@@ -34,19 +35,16 @@ class TorchBase(ABC):
         self.dataset_name = config.dataset_name
         self.resume_checkpoint = config.resume_checkpoint
         self.best_path = self.get_save_path()
-        
+
         if config.use_wandb:
             if self.resume_checkpoint:
                 wandb_id = read_wandb_id(f"{self.best_path}/wandb_run.txt")
             else:
                 wandb_id = write_wandb_id(f"{self.best_path}/wandb_run.txt")
-                
+
         # The path to store the best model
         self.best_path = self.best_path + f"/{str(wandb_id)}"
         SAVE_PATHS.make_dir(self.best_path)
-
-        # Whether to register embeddings
-        self.save_embeddings = False
 
         self.update_frequency = 64
         self.lora: LoraConfig = self.lora_config()
@@ -77,7 +75,7 @@ class TorchBase(ABC):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Prepare the module for training
-        
+
         self.model, self.processor = self.prepare_module()
         self.model.to(self.device)
 
@@ -92,7 +90,11 @@ class TorchBase(ABC):
                 project=config.wandb_project,
                 config=config,
                 job_type="Train",
-                tags=[config.model_name, f"rank_{self.lora.r}", f"lora_alpha_{self.lora.lora_alpha}"],
+                tags=[
+                    config.model_name,
+                    f"rank_{self.lora.r}",
+                    f"lora_alpha_{self.lora.lora_alpha}",
+                ],
                 id=f"{config.model_name}-{self.dataset_name}-baseline-{wandb_id}",
                 resume=resume_wandb,
                 name=f"{config.model_name}-{self.dataset_name}-baseline",
@@ -112,16 +114,16 @@ class TorchBase(ABC):
         if not config._resume_state:
             self.state = State()
         else:
-            self.state = State.load_state(self.best_path, FileNames.StateDictionary.format(config.split))
+            self.state = State.load_state(
+                self.best_path, FileNames.StateDictionary.format(config.split)
+            )
             self.optimizer.load_state_dict(self.state.optimizer_state_dict)
             self.scheduler.load_state_dict(self.state.scheduler_state_dict)
 
     def prepare_module(self) -> Tuple[Blip2ForConditionalGeneration, Blip2Processor]:
         params = self.config
-        if self.resume_checkpoint:
-            model, processor = self.load_from_checkpoint(is_trainable=params.is_trainable)
-        else:
-            model, processor = self.bootstrap_model()
+
+        processor = self.load_processor(use_checkpoint=self.resume_checkpoint)
 
         if params.train_args is not None:
             params.train_args.processor = processor
@@ -148,6 +150,7 @@ class TorchBase(ABC):
                 num_workers=params.num_val_workers,
             )
             self.answer_space = val_dataset.answer_space
+            assert len(val_dataset.answer_space) == len(train_dataset.answer_space)
 
         if params.test_args is not None:
             params.test_args.processor = processor
@@ -161,6 +164,11 @@ class TorchBase(ABC):
                 num_workers=params.num_test_workers,
             )
             self.answer_space = test_dataset.answer_space
+
+        if self.resume_checkpoint:
+            model = self.load_from_checkpoint(is_trainable=params.is_trainable)
+        else:
+            model = self.bootstrap_model(answer_space=self.answer_space)
 
         return model, processor
 
@@ -189,7 +197,6 @@ class TorchBase(ABC):
             wandb.log({"Epoch Train Loss": train_loss})
             wandb.log({"Epoch Valid Loss": val_loss})
             self.on_epoch_end()
-
 
             # Save the best result
             if val_loss <= best_epoch_loss:
@@ -241,7 +248,8 @@ class TorchBase(ABC):
         logger.info(f"Best Loss: {best_epoch_loss:.4f}")
 
         # Load the best model
-        model, processor = self.load_from_checkpoint(is_trainable=True)
+        model = self.load_from_checkpoint(is_trainable=True)
+        processor = self.load_processor(use_checkpoint=True)
         # self.push_to_hub(model, processor)
         print()
 
@@ -273,24 +281,27 @@ class TorchBase(ABC):
             # Current batch size, can be less than self.batch_size for the last batch
             batch_size = input_ids.size(0)
 
-            # Generate the output
-            outputs = self.model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                labels=labels,
-                attention_mask=attention_mask,
-            )
-            if self.save_embeddings:
-                assert 3 == 4
-                self.update_state_with_embeddings(outputs)
+            # Prepare arguments for the model's forward method
+            model_kwargs = {
+                "input_ids": input_ids,
+                "pixel_values": pixel_values,
+                "labels": labels,
+                "attention_mask": attention_mask,
+            }
 
+            # Add the extract_features parameter only during classification
+            if hasattr(self.model, "classifier"):
+                model_kwargs["extract_features"] = epoch == 1
+
+            # Generate the output trainable params:
+            outputs = self.model(**model_kwargs)
 
             # Now update the loss
             loss = outputs.loss
             loss = loss / n_accumulate
             loss.backward()
 
-            self.on_batch_processed(outputs, labels)        
+            self.on_batch_processed(outputs, labels)
             # Now perform the optimizer step only when step is a multiple of n_accumulate
             if (step + 1) % n_accumulate == 0:
                 self.optimizer.step()
@@ -328,7 +339,9 @@ class TorchBase(ABC):
             bar = tqdm(enumerate(self.val_dataloader), total=len(self.val_dataloader))
             for step, data in bar:
                 # Unpack the collator values
-                input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(data)
+                input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(
+                    data
+                )
 
                 # Get the batch size
                 batch_size = input_ids.size(0)
@@ -376,16 +389,25 @@ class TorchBase(ABC):
             filename=f"{ROOT_DATA_DIR}/logs/{self.model_name}/{datetime.now().strftime('%m_%d_%Y_%H_%M.log')}"
         )
         handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter("%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(filename)s:%(lineno)d - %(name)s - %(levelname)s - %(message)s"
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+
+    def load_processor(self, use_checkpoint):
+        if use_checkpoint:
+            processor = Blip2Processor.from_pretrained(self.best_path)
+        else:
+            processor = ModelFactory.get_processor(self.model_name)
+        return processor
 
     @abstractmethod
     def send_to_device_if_needed(self, data):
         pass
 
     @abstractmethod
-    def bootstrap_model(self):
+    def bootstrap_model(self, answer_space):
         pass
 
     @abstractmethod

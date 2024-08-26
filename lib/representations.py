@@ -12,7 +12,7 @@ from transformers import (
     Conv1D,
 )
 
-from .types import MODEL_CLASS_MAPPING, MODEL_REPO_MAPPING, PROCESSOR_CLASS_MAPPING, ModelTypes
+from .types import MODEL_CLASS_MAPPING, MODEL_REPO_MAPPING, PROCESSOR_CLASS_MAPPING, ModelTypes, DatasetTypes
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +72,6 @@ class ModelFactory:
 
         repo_id: str = MODEL_REPO_MAPPING[model_name]
         model_class: Blip2ForConditionalGeneration = MODEL_CLASS_MAPPING[model_name]
-        processor_class: Blip2Processor = PROCESSOR_CLASS_MAPPING[model_name]
-
-        # Load both the processor and model
-        processor = processor_class.from_pretrained(repo_id)
 
         model = model_class.from_pretrained(repo_id, torch_dtype=torch_dtype, quantization_config=bnb_config)
 
@@ -84,8 +80,15 @@ class ModelFactory:
             model = get_peft_model(model, lora_config)
             model.print_trainable_parameters()
 
-        return model, processor
-
+        return model
+    
+    def get_processor(model_name):
+        repo_id: str = MODEL_REPO_MAPPING[model_name]
+        processor_class: Blip2Processor = PROCESSOR_CLASS_MAPPING[model_name]
+        
+        processor = processor_class.from_pretrained(repo_id)
+        return processor
+        
     def prepare_model_for_kbit_training(model, use_gradient_checkpointing):
         return prepare_model_for_kbit_training(
             model,

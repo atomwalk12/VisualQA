@@ -6,16 +6,15 @@ import torch.utils.checkpoint
 from peft import LoraConfig
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import BitsAndBytesConfig, Blip2Processor
+from transformers import BitsAndBytesConfig
 
 import wandb
 from config import Repositories
 
 from ..daquar.daquar_classification import DaquarClassification
 from ..easy_vqa.easyvqa_classification import EasyVQAClassification
-from ..models.base_classifier import Blip2, Blip2ClassifierConfig
-from ..models.blip2_base_classifier import Blip2BaseClassifier
-from ..models.blip2_classifier import Blip2Classifier
+from ..models.base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
+from ..models.blip2_classifier_experiment1 import Blip2ClassifierExperiment1
 from ..representations import ModelFactory, ModelTypes
 from ..types import SAVE_PATHS, DatasetTypes, FileNames, Suffix, TrainingParameters
 from ..utils import ClassificationMetricsAccumulator
@@ -28,8 +27,12 @@ class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
 
-        self.train_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Train, update_frequency=16)
-        self.val_accumulator = ClassificationMetricsAccumulator(self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1)
+        self.train_accumulator = ClassificationMetricsAccumulator(
+            self.dataset_name, self.answer_space, Suffix.Train, update_frequency=16
+        )
+        self.val_accumulator = ClassificationMetricsAccumulator(
+            self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1
+        )
         self.update_frequency = 64
 
     def get_repository(self):
@@ -45,21 +48,25 @@ class ClassificationTrainer(TorchBase):
             return SAVE_PATHS.BLIP2_Classifier_EasyVQA
 
     def load_from_checkpoint(self, is_trainable):
-        base_model, _ = self.get_models(apply_lora=False)
+        base_model = self.get_models(apply_lora=False)
 
-        base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
+        base_model = ModelFactory.prepare_model_for_kbit_training(
+            base_model, use_gradient_checkpointing=True
+        )
 
         local_model_path = self.best_path
-        processor = Blip2Processor.from_pretrained(local_model_path)
 
-        if self.model_name == ModelTypes.BLIP2Classifier:
-            model = Blip2Classifier.from_pretrained(
+        if (
+            self.model_name == ModelTypes.BLIP2Classifier
+            or self.model_name == ModelTypes.BLIP2FinetunedClassifier
+        ):
+            model = Blip2ClassifierExperiment1.from_pretrained(
                 base_model,
                 local_model_path,
                 adapter_name="vqa_classification",
                 is_trainable=is_trainable,
             )
-        elif self.model_name == ModelTypes.BLIP2BaseClassifier:
+        elif self.model_name == ModelTypes.BLIP2FinetunedBaseClassifier:
             model = Blip2BaseClassifier.from_pretrained(
                 base_model,
                 local_model_path,
@@ -69,32 +76,32 @@ class ClassificationTrainer(TorchBase):
         else:
             raise KeyError()
 
-        return model, processor
+        return model
 
-    def bootstrap_model(self):
+    def bootstrap_model(self, answer_space):
         model_name = self.model_name
         # Load the model and processor
-        model, processor = self.get_models(apply_lora=True)
-        answer_space_dim = 13 if self.config.dataset_name == DatasetTypes.EASY_VQA else 582
+        model = self.get_models(apply_lora=True)
 
-        if model_name == ModelTypes.BLIP2BaseClassifier:
+        if model_name == ModelTypes.BLIP2FinetunedBaseClassifier:
             config = Blip2ClassifierConfig(
                 classification_input_dim=5120,
-                save_embeddings=self.save_embeddings,
-                answer_space_dim=answer_space_dim,
+                answer_space=answer_space,
                 dataset_name=self.dataset_name,
             )
             model = Blip2BaseClassifier(config, model)
-        elif model_name == ModelTypes.BLIP2Classifier:
+        elif (
+            model_name == ModelTypes.BLIP2Classifier
+            or model_name == ModelTypes.BLIP2FinetunedClassifier
+        ):
             config = Blip2ClassifierConfig(
                 classification_input_dim=768,
-                save_embeddings=self.save_embeddings,
-                answer_space_dim=answer_space_dim,
+                answer_space=answer_space,
                 dataset_name=self.dataset_name,
             )
-            model = Blip2Classifier(config, model)
+            model = Blip2ClassifierExperiment1(config, model)
 
-        return model, processor
+        return model
 
     def test(self):
         self.model.eval()
@@ -147,7 +154,9 @@ class ClassificationTrainer(TorchBase):
                     )
 
         # Save the entire results
-        self.save_trainer_state(best_epoch_loss, history, step + 1, self.test_dataloader)
+        self.save_trainer_state(
+            best_epoch_loss, history, step + 1, self.test_dataloader
+        )
 
         # Release resources
         gc.collect()
@@ -174,17 +183,21 @@ class ClassificationTrainer(TorchBase):
         # This is done automatically within the model's state. Nothing to do.
         pass
 
-    def save_trainer_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):  # noqa: F821
+    def save_trainer_state(
+        self, best_epoch_loss, history, epoch, dataloader: DataLoader
+    ):  # noqa: F821
         # This should always be true, but checking for intellisense completion.
         assert isinstance(self.model, Blip2)
-        if self.save_embeddings:
-            assert 3 == 4
-            embeddings = self.model.get_state()
-            history["embeddings"] = embeddings
 
         # retrieve model's state and save to file
         self.state.save_state(
-            self.best_path, best_epoch_loss, history, epoch, self.scheduler, self.optimizer, dataloader.dataset
+            self.best_path,
+            best_epoch_loss,
+            history,
+            epoch,
+            self.scheduler,
+            self.optimizer,
+            dataloader.dataset,
         )
 
     def get_models(self, apply_lora):
@@ -267,7 +280,10 @@ class ClassificationTrainer(TorchBase):
         pass
 
     def save_confusion_matrix_state(self):
-        self.state.save_state_to_file(self.best_path, file_name=FileNames.ConfusionMatrix.format(self.config.split))
+        self.state.save_state_to_file(
+            self.best_path,
+            file_name=FileNames.ConfusionMatrix.format(self.config.split),
+        )
 
         self.state.history["confusion_predictions"] = []
         self.state.history["confusion_labels"] = []

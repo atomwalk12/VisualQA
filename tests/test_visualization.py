@@ -12,7 +12,7 @@ from transformers import Blip2Processor
 def train_ds():
     # Get cached dataset is available, otherwise generate a new one
     processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-    args = VQAParameters(split="train[16:25]", processor=processor, load_from_disk=False)
+    args = VQAParameters(split="train[16:25]", processor=processor, recompute=False)
     train_ds = EasyVQAGeneration(args)
 
     return train_ds

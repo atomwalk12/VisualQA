@@ -48,13 +48,11 @@ class GenerationTrainer(TorchBase):
             return SAVE_PATHS.BLIP2_Generator_EasyVQA
 
     def load_from_checkpoint(self, is_trainable):
-        base_model, _ = self.get_models(apply_lora=False)
-
+        base_model = self.get_models(apply_lora=False)
+        
         base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
 
         local_model_path = self.best_path
-
-        processor = Blip2Processor.from_pretrained(local_model_path)
         model = PeftModel.from_pretrained(
             base_model,
             local_model_path,
@@ -63,12 +61,12 @@ class GenerationTrainer(TorchBase):
         )
         model.print_trainable_parameters()
 
-        return model, processor
+        return model
 
-    def bootstrap_model(self):
-        model, processor = self.get_models(apply_lora=True)
-        return model, processor
-
+    def bootstrap_model(self, answer_space):
+        model = self.get_models(apply_lora=True)
+        return model
+    
     def test(self):
         self.model.eval()
         history = self.state.history

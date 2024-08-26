@@ -29,6 +29,7 @@ class FileNames(StrEnum):
 class EvaluationMetrics(StrEnum):
     ConfusionMatrix = "confusion-matrix"
     UMAP = "umap"
+    DATA_DISTRIBUTION = "distribution"
 
 
 class DatasetTypes(StrEnum):
@@ -43,11 +44,14 @@ class DatasetPath(StrEnum):
 class ModelTypes(StrEnum):
     BLIP2Generator = "blip2-generator"
     BLIP2Classifier = "blip2-classifier"
-    BLIP2BaseClassifier = "blip2-base-classifier"
+    BLIP2FinetunedClassifier = "blip2-finetuned-classifier"
+    BLIP2FinetunedGenerator = "blip2-finetuned-generator"
+    BLIP2FinetunedBaseClassifier = "blip2-finetuned-base-classifier"
 
 
 class HFRepos(StrEnum):
     BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
+    BLIP2_COCO = "Salesforce/blip2-opt-2.7b-coco"
 
 
 class Suffix(StrEnum):
@@ -60,12 +64,14 @@ class Suffix(StrEnum):
 MODEL_REPO_MAPPING = {
     ModelTypes.BLIP2Generator: HFRepos.BLIP2_OPT.value,
     ModelTypes.BLIP2Classifier: HFRepos.BLIP2_OPT.value,
-    ModelTypes.BLIP2BaseClassifier: HFRepos.BLIP2_OPT.value,
+    ModelTypes.BLIP2FinetunedClassifier: HFRepos.BLIP2_COCO.value,
+    ModelTypes.BLIP2FinetunedGenerator: HFRepos.BLIP2_COCO.value,
 }
 
 # Mapping from model types to model classes
 MODEL_CLASS_MAPPING = {
-    ModelTypes.BLIP2BaseClassifier: Blip2Model,
+    ModelTypes.BLIP2FinetunedGenerator: Blip2ForConditionalGeneration,
+    ModelTypes.BLIP2FinetunedClassifier: Blip2ForConditionalGeneration,
     ModelTypes.BLIP2Generator: Blip2ForConditionalGeneration,
     ModelTypes.BLIP2Classifier: Blip2ForConditionalGeneration,
 }
@@ -73,7 +79,8 @@ MODEL_CLASS_MAPPING = {
 PROCESSOR_CLASS_MAPPING = {
     ModelTypes.BLIP2Generator: Blip2Processor,
     ModelTypes.BLIP2Classifier: Blip2Processor,
-    ModelTypes.BLIP2BaseClassifier: Blip2Processor,
+    ModelTypes.BLIP2FinetunedGenerator: Blip2Processor,
+    ModelTypes.BLIP2FinetunedClassifier: Blip2Processor,
 }
 
 
@@ -108,7 +115,7 @@ class CustomDataset(Dataset, ABC):
         pass
 
     @abstractmethod
-    def initialize_for_training():
+    def prepare_labels():
         pass
 
     @abstractmethod
@@ -181,9 +188,9 @@ class VQAParameters:
     split: str
     is_testing: bool = False
     processor: Blip2Processor = None
-    load_from_disk: bool = True
-    dataset_name: str = DatasetTypes.EASY_VQA
+    recompute: bool = False
     use_stratified_split: bool = False
+    keep_infrequent: bool = False
 
 
 @dataclass
@@ -236,8 +243,8 @@ class TrainingParameters:
     optimizer_name: str = "AdamW"
     scheduler_name: str = "CosineAnnealingLR"
     n_accumulate: int = 1
-    train_batch_size: int = 64
-    val_batch_size: int = 64
+    train_batch_size: int = 40
+    val_batch_size: int = 40
     test_batch_size: int = 1
     optimizer: AdamW = None
     scheduler: lr_scheduler.CosineAnnealingLR = None

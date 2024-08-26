@@ -99,9 +99,9 @@ def main(args: argparse.Namespace):
         resume_state=False
     )
 
-    if args.model == ModelTypes.BLIP2Generator:
+    if args.model == ModelTypes.BLIP2Generator or args.model == ModelTypes.BLIP2FinetunedGenerator:
         module = GenerationTrainer(parameters)
-    elif args.model == ModelTypes.BLIP2Classifier or args.model == ModelTypes.BLIP2BaseClassifier:
+    elif args.model == ModelTypes.BLIP2Classifier or args.model == ModelTypes.BLIP2FinetunedClassifier:
         module = ClassificationTrainer(parameters)
 
     model, history = module.finetune()

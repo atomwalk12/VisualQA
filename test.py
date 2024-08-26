@@ -2,13 +2,12 @@ import argparse
 import logging
 import warnings
 
-
-
+from lib.trainers.base_trainer import TorchBase
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
-from lib.types import SAVE_PATHS, DatasetTypes, ModelTypes, TrainingParameters, VQAParameters
-from lib.trainers.base_trainer import TorchBase
+from lib.types import DatasetTypes, ModelTypes, TrainingParameters, VQAParameters
 from lib.utils import EXPERIMENT
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -33,20 +32,15 @@ def get_parser() -> argparse.ArgumentParser:
         required=True,
         help="The dataset to use",
     )
-    parser.add_argument(
-        "--seed", type=int, default=2024, help="Set the seed for reproducible results."
-    )
+    parser.add_argument("--seed", type=int, default=2024, help="Set the seed for reproducible results.")
     return parser
 
 
 def evaluate_model(args):
     if isinstance(args.seed, int):
         EXPERIMENT.set_seed(args.seed).apply_seed()
-        
-    
-    test_args = VQAParameters(
-        split=args.test_split, is_testing=True, use_stratified_split=True
-    )
+
+    test_args = VQAParameters(split=args.test_split, is_testing=True, use_stratified_split=True)
     parameters = TrainingParameters(
         dataset_name=args.dataset,
         resume_checkpoint=True,
@@ -55,15 +49,12 @@ def evaluate_model(args):
         train_args=None,
         val_args=None,
         test_args=test_args,
-        resume_state=False
+        resume_state=False,
     )
 
-    if args.model == ModelTypes.BLIP2Generator:
+    if args.model == ModelTypes.BLIP2Generator or args.model == ModelTypes.BLIP2FinetunedGenerator:
         module: TorchBase = GenerationTrainer(parameters)
-    elif (
-        args.model == ModelTypes.BLIP2Classifier
-        or args.model == ModelTypes.BLIP2BaseClassifier
-    ):
+    elif args.model == ModelTypes.BLIP2Classifier or args.model == ModelTypes.BLIP2FinetunedClassifier:
         module: TorchBase = ClassificationTrainer(parameters)
 
     history = module.test()

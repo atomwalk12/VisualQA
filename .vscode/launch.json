@@ -137,7 +137,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-classifier",
+                "blip2-finetuned-classifier",
                 "--dataset",
                 "daquar",
                 "--test-split",
@@ -153,7 +153,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-classifier",
+                "blip2-finetuned-classifier",
                 "--dataset",
                 "daquar",
                 "--metric",
@@ -171,7 +171,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-generator",
+                "blip2-finetuned-generator",
                 "--dataset",
                 "daquar",
                 "--train-split",
@@ -189,7 +189,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-generator",
+                "blip2-finetuned-generator",
                 "--dataset",
                 "daquar",
                 "--test-split",
@@ -204,7 +204,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-classifier",
+                "blip2-finetuned-classifier",
                 "--dataset",
                 "daquar",
                 "--metric",
