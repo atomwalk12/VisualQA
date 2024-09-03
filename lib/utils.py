@@ -66,7 +66,7 @@ class ClassificationMetricsAccumulator:
         self.accumulated_targets_epoch = []
         self.iteration = 0
         self.answer_space = answer_space
-        self.epoch = 0
+        self.epoch = 1
         self.name = name
         self.update_frequency = update_frequency
 
@@ -100,7 +100,7 @@ class ClassificationMetricsAccumulator:
 
     def generate_report(self, targets, predictions, multi_label):
         if multi_label:
-            report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True, zero_division=0.0)
+            report = classification_report(targets, predictions, target_names=self.answer_space, output_dict=True, zero_division=0.0)
         else:
             # Classification report
             report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True, zero_division=0.0)
@@ -135,48 +135,71 @@ class ClassificationMetricsAccumulator:
             result[f"{self.name}_recall_samples"] = recall_samples
             result[f"{self.name}_f1_samples"] = f1_samples
             result[f"{self.name}_precision_micro"] = precision_micro
-            result[f"{self.name}_recall_micro"] = (recall_micro,)
+            result[f"{self.name}_recall_micro"] = recall_micro
             result[f"{self.name}_f1_micro"] = f1_micro
 
         return result
 
     def log_multi_label_statistics(self, y_pred, y_true):
-        # Assuming y_pred and y_true are your predicted and true labels
         logits = y_pred.logits.clone().detach().cpu()
         targets = y_true.clone().detach().cpu()
         self.iteration += 1
 
-        # For multi-label, apply sigmoid and threshold to get binary predictions
+        # Apply sigmoid to get probabilities
         probs = torch.sigmoid(logits)
-        predictions = (probs > 0.5).int()
 
-        self._accumulate_data(targets, predictions)
+        # Method 1: Adaptive Thresholding
+        threshold = probs.mean()  # Use the mean probability as the threshold
+        predictions_adaptive = (probs > threshold).int()
+
+        # Method 2: Top-K Selection
+        k = 3  # Select top 3 labels for each sample
+        _, top_k_indices = torch.topk(probs, k, dim=1)
+        predictions_top_k = torch.zeros_like(probs)
+        predictions_top_k.scatter_(1, top_k_indices, 1)
+
+        # Method 3: Percentile Thresholding
+        percentile_threshold = np.percentile(probs.numpy(), 70)  # 70th percentile
+        predictions_percentile = (probs > percentile_threshold).int()
+
+        # Store all types of predictions
+        self._accumulate_data(targets, {
+            'adaptive': predictions_adaptive,
+            'top_k': predictions_top_k,
+            'percentile': predictions_percentile
+        })
 
         if self.iteration % self.update_frequency == 0:
             self.report_multi_label_statistics()
 
-
     def report_multi_label_statistics(self):
         if len(self.accumulated_predictions) > 0:
-            predictions = torch.stack(self.accumulated_predictions).to(torch.float32)
-            targets = torch.stack(self.accumulated_targets).to(torch.float32)
+            targets = torch.stack([t for t, _ in self.accumulated_predictions])
+            predictions = {
+                method: torch.stack([p[method] for _, p in self.accumulated_predictions])
+                for method in ['adaptive', 'top_k', 'percentile']
+            }
 
-            report = self.generate_report(targets, predictions, multi_label=True)
+            # Squeeze the extra dimension
+            targets = targets.squeeze(0).numpy().astype(int)
+            predictions = {method: preds.squeeze(0).numpy() for method, preds in predictions.items()}
 
-            # Multi-label statistics
-            hamming_loss_value = hamming_loss(targets, predictions)
-            jaccard = jaccard_score(targets, predictions, zero_division=0.0, labels=np.unique(predictions),average="macro")
-            accuracy = accuracy_score(targets, predictions)
+            for method, preds in predictions.items():
+                report = self.generate_report(targets, preds, multi_label=True)
+                
+                # Add method-specific prefix to metric names
+                report = {f"{method}_{k}": v for k, v in report.items()}
+                
+                # Multi-label statistics
+                report[f"{self.name}_{method}_hamming_loss"] = hamming_loss(targets, preds)
+                report[f"{self.name}_{method}_jaccard"] = jaccard_score(targets, preds, average="samples", zero_division=0.0)
+                report[f"{self.name}_{method}_accuracy"] = accuracy_score(targets, preds, normalize=True, sample_weight=None)
+                report[f"{self.name}_{method}_exact_match_ratio"] = (preds == targets).all(axis=1).mean()
 
-            report[f"{self.name}_hamming_loss"] = hamming_loss_value
-            report[f"{self.name}_jaccard"] = jaccard
-            report[f"{self.name}_accuracy"] = accuracy
+                wandb.log(report)
 
-            wandb.log(report)
-
-        self.accumulated_targets = []
         self.accumulated_predictions = []
-        
+
     def log_confusion_matrix(self):
         title = f"{self.epoch}_{self.name}_Confusion_Matrix"
         wandb.log(
@@ -195,9 +218,11 @@ class ClassificationMetricsAccumulator:
         self.epoch += 1
 
     def _accumulate_data(self, targets, predictions):
-        self.accumulated_predictions.extend(predictions)
-        self.accumulated_targets.extend(targets)
-        if self.dataset_name == DatasetTypes.EASY_VQA:
+        if self.dataset_name == DatasetTypes.DAQUAR:
+            self.accumulated_predictions.append((targets, predictions))
+        elif self.dataset_name == DatasetTypes.EASY_VQA:
+            self.accumulated_predictions.extend(predictions)
+            self.accumulated_targets.extend(targets)
             self.accumulated_predictions_epoch.extend(predictions)
             self.accumulated_targets_epoch.extend(targets)
 

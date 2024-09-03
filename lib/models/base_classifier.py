@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 from collections import defaultdict
 
 import torch
@@ -12,6 +13,7 @@ from transformers import Blip2Config, PreTrainedModel
 import wandb
 from lib.types import DatasetTypes
 
+from .feature_visualizer import FeatureVisualizer
 
 logger = logging.getLogger(__name__)
 
@@ -38,18 +40,23 @@ class Blip2ClassifierConfig(Blip2Config):
 
 class Blip2BaseClassifier(PreTrainedModel):
     model: PreTrainedModel
-    config_class: Blip2ClassifierConfig
+    config_class: Blip2ClassifierConfig = Blip2ClassifierConfig()
     classifier: Module
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):
         super().__init__(config)
         self.embeddings: defaultdict[str, list] = defaultdict(list)
 
+        self.answer_space = config.answer_space
+        self.id_to_answer = {
+            idx: answer for idx, answer in enumerate(self.answer_space)
+        }
+
+        self.feature_visualizer = FeatureVisualizer(self.id_to_answer, config.dataset_name)
         self.config = config
         self.model: PeftModel = peft_model
         self.peft_config: Blip2Config = peft_model.peft_config
         self.answer_space_dim = config.answer_space
-
         self.set_criterion()
 
     def save_pretrained(self, save_directory, **kwargs):
@@ -63,6 +70,15 @@ class Blip2BaseClassifier(PreTrainedModel):
         # Save the additional layer
         additional_layer_path = os.path.join(output_path, "classification_layer.pt")
         torch.save(self.classifier.state_dict(), additional_layer_path)
+
+    def save_statistics(self, output_path):
+        features_path_train = os.path.join(output_path, "features_train.pkl")
+        features_path_valid = os.path.join(output_path, "features_val.pkl")
+        pickle.dump(self.feature_visualizer.get_features("train"), open(features_path_train, "wb"))
+        pickle.dump(self.feature_visualizer.get_features("val"), open(features_path_valid, "wb"))
+    
+    def reset_state(self):
+        self.feature_visualizer.reset()
 
     @classmethod
     def from_pretrained(
@@ -90,8 +106,8 @@ class Blip2BaseClassifier(PreTrainedModel):
 
         # Load the additional layer
         additional_layer_path = os.path.join(
-            pretrained_model_name_or_path, "classifier_layer.pt"
-    )
+            pretrained_model_name_or_path, "classification_layer.pt"
+        )
         if os.path.exists(additional_layer_path):
             model.classifier.load_state_dict(torch.load(additional_layer_path))
 

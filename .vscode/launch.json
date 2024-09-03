@@ -34,7 +34,7 @@
                 "--dataset",
                 "easy-vqa",
                 "--test-split",
-                "test[:1000]",
+                "test",
             ]
         },
         {
@@ -171,7 +171,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-finetuned-generator",
+                "blip2-generator",
                 "--dataset",
                 "daquar",
                 "--train-split",
@@ -210,7 +210,7 @@
                 "--metric",
                 "umap",
                 "--split",
-                "test[:300]",
+                "train",
             ]
         },
         // {

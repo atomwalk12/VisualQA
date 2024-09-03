@@ -55,7 +55,7 @@ class ModelFactory:
         model_name: ModelTypes, apply_lora: bool, lora_config, bnb_config: BitsAndBytesConfig, torch_dtype
     ) -> Tuple[AutoModel, AutoProcessor]:
         """
-        Get the model and processor for a given model type.
+        Get the model for a given model type.
 
         Args:
             model_name (ModelTypes): The type of model to retrieve.
@@ -71,7 +71,7 @@ class ModelFactory:
             raise ValueError(f"Invalid model type: {model_name}")
 
         repo_id: str = MODEL_REPO_MAPPING[model_name]
-        model_class: Blip2ForConditionalGeneration = MODEL_CLASS_MAPPING[model_name]
+        model_class = MODEL_CLASS_MAPPING[model_name]
 
         model = model_class.from_pretrained(repo_id, torch_dtype=torch_dtype, quantization_config=bnb_config)
 

@@ -24,19 +24,21 @@ class DatabaseBase(CustomDataset, ABC):
     def __init__(self, dataset_name: DatasetTypes, params: VQAParameters):
         super().__init__(params.split)
         self.dataset_name = dataset_name
+        self.params = params
 
         assert params.processor is not None
-        
+
         self.padding_max_length = self.get_padding_max_length()
-        
+
         self.min_class_size = 50
-        
+
         # Store the answer space for commodity
         self.answer_space = self._get_answers()
-        
+
         # Store parameters
         self.processor = params.processor
-        self.use_stratified_split = params.use_stratified_split
+        self.use_filtered_split = params.use_filtered_split
+        self.use_proportional_split = params.use_proportional_split
         self.keep_infrequent = params.keep_infrequent
 
         # can be train or val
@@ -51,25 +53,32 @@ class DatabaseBase(CustomDataset, ABC):
         self.is_testing = params.is_testing
         self.use_raw_dataset = False
 
-    
     def initialize_dataset(self):
         # Prepare the dataset for training
-        if self.use_stratified_split:
-            self.raw_dataset = self.initialize_stratified_raw()
+        if self.use_filtered_split:
+            self.raw_dataset = self.initialize_filtered_dataset()
+        elif self.use_proportional_split:
+            self.raw_dataset = self.initialize_proportional_raw()
         else:
             self.raw_dataset = self.initialize_raw()
-            
+
         # Create mappings
-        self.answers_to_id = {answer: idx for idx, answer in enumerate(self.answer_space)}
-        self.id_to_answer = {idx: answer for idx, answer in enumerate(self.answer_space)}
-        
-        self.prepare_labels()
-        
-    
+        self.answers_to_id = {
+            answer: idx for idx, answer in enumerate(self.answer_space)
+        }
+        self.id_to_answer = {
+            idx: answer for idx, answer in enumerate(self.answer_space)
+        }
+
+        if self.split != Suffix.All:
+            self.prepare_labels()
+
     @property
     def dataset(self):
         if self._dataset is None:
-            raise Exception("Please call transform() before accessing the training dataset.")
+            raise Exception(
+                "Please call transform() before accessing the training dataset."
+            )
         return self._dataset
 
     def __len__(self) -> int:
@@ -146,18 +155,11 @@ class DatabaseBase(CustomDataset, ABC):
 
             for key, value in vars(loaded_data).items():
                 if hasattr(self, key):
-                    if key == "use_stratified_split" and self.use_stratified_split != value:
-                        raise ValueError(
-                            f"Mismatch in stratified splitting. "
-                            f"Required: {self.use_stratified_split}, "
-                            f"Dataset created with: {value}"
-                        )
                     setattr(self, key, value)
                 else:
                     raise KeyError(f"Attribute {key} not found in class instance.")
 
-            logger.info(f"Loaded {len(self._dataset)
-                                  } items from {complete_path}")
+            logger.info(f"Loaded {len(self.raw_dataset)} items from {complete_path}")
             return self
         except FileNotFoundError:
             logger.error(f"Was not able to load pickle file at {complete_path}")
@@ -168,7 +170,9 @@ class DatabaseBase(CustomDataset, ABC):
         # type will be instantiated in subclass
         assert type is not None
 
-        Path(f"{ROOT_DATA_DIR}/{self.dataset_name}/{type}").mkdir(parents=True, exist_ok=True)
+        Path(f"{ROOT_DATA_DIR}/{self.dataset_name}/{type}").mkdir(
+            parents=True, exist_ok=True
+        )
         out = f"{ROOT_DATA_DIR}/{self.dataset_name}/{type}/{self.split}.pkl"
         return os.path.abspath(out)
 
@@ -177,7 +181,11 @@ class DatabaseBase(CustomDataset, ABC):
         return dataset.equals(other.to_pandas())
 
     @abstractmethod
-    def initialize_stratified_raw(self):
+    def initialize_filtered_dataset(self):
+        pass
+
+    @abstractmethod
+    def initialize_proportional_raw(self):
         pass
 
     @abstractmethod

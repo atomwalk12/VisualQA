@@ -1,12 +1,20 @@
 import logging
+import random
+from collections import defaultdict
 
 from datasets import Dataset
-from easy_vqa import get_answers, get_test_image_paths, get_test_questions, get_train_image_paths, get_train_questions
+from easy_vqa import (
+    get_answers,
+    get_test_image_paths,
+    get_test_questions,
+    get_train_image_paths,
+    get_train_questions,
+)
 from PIL import Image
 
+from ..dataset_base import DatabaseBase
 from ..types import DatasetTypes, Suffix, VQAParameters
 from ..utils import EXPERIMENT, parse_split_slicer
-from ..dataset_base import DatabaseBase
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +32,8 @@ class EasyVQADatasetBase(DatabaseBase):
     @classmethod
     def get_answer(cls):
         return get_answers()
-    
-    def initialize_stratified_raw(self):
+
+    def initialize_filtered_dataset(self):
         """Method to initialize the dataset."""
 
         if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
@@ -75,10 +83,9 @@ class EasyVQADatasetBase(DatabaseBase):
                 test_size=0.2,
                 stratify_by_column="stratify_column",
                 seed=EXPERIMENT.get_seed(),
-                shuffle=True
+                shuffle=True,
             )
             raw_dataset = ds[split if split == Suffix.Train else Suffix.Test]
-            
 
         logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
         return raw_dataset
@@ -86,12 +93,19 @@ class EasyVQADatasetBase(DatabaseBase):
     def initialize_raw(self):
         """Method to initialize the dataset."""
 
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            questions = get_train_questions()
-            images = get_train_image_paths()
-        elif self.split.startswith(Suffix.Test):
-            questions = get_test_questions()
-            images = get_test_image_paths()
+        # Combine train and test datasets
+        train_questions = get_train_questions()
+        train_images = get_train_image_paths()
+        test_questions = get_test_questions()
+        test_images = get_test_image_paths()
+
+        # Merge the questions and images
+        questions = [
+            train_questions[0] + test_questions[0],
+            train_questions[1] + test_questions[1],
+            train_questions[2] + test_questions[2],
+        ]
+        images = {**train_images, **test_images}
 
         dict = {
             "question": questions[0],
@@ -103,16 +117,73 @@ class EasyVQADatasetBase(DatabaseBase):
 
         raw_dataset = Dataset.from_dict(dict)
 
-        split, start, end = parse_split_slicer(self.split)
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            target = Suffix.Test if split.startswith(Suffix.Val) else split
-            raw_dataset = raw_dataset.train_test_split(test_size=0.25, seed=EXPERIMENT.get_seed())[target]
-
-        if start is not None or end is not None:
-            raw_dataset = raw_dataset.select(range(start or 0, end or len(raw_dataset)))
-
-        logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
+        logger.info(f"Read combined dataset, length: {len(raw_dataset)}")
         return raw_dataset
 
     def get_padding_max_length(self):
         return 25
+
+    def initialize_proportional_raw(self):
+        """Method to initialize the dataset with a proportional and balanced split."""
+        raw_dataset = self.initialize_raw()
+
+        def stratified_split(examples):
+            # Group examples by answer
+            grouped = defaultdict(list)
+            for i, answer in enumerate(examples["answer"]):
+                grouped[answer].append(i)
+
+            train_indices, val_indices = [], []
+            for answer, indices in grouped.items():
+                total_samples = len(indices)
+                if total_samples < 125:
+                    # All samples go to training
+                    train_indices.extend(indices)
+                elif total_samples <= 3125:
+                    # 80-20 split for train/val
+                    split_point = int(total_samples * 0.8)
+                    train_indices.extend(indices[:split_point])
+                    val_indices.extend(indices[split_point:])
+                else:
+                    # Cap at 2500 for training and 625 for validation
+                    train_samples = random.sample(indices, 1700)
+                    remaining = [i for i in indices if i not in train_samples]
+                    val_samples = random.sample(remaining, 400)
+                    train_indices.extend(train_samples)
+                    val_indices.extend(val_samples)
+
+            return train_indices, val_indices
+
+        # Apply the custom splitting function
+        train_indices, val_indices = stratified_split(raw_dataset)
+
+        indices = (
+            train_indices
+            if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Test)
+            else val_indices
+        )
+        raw_dataset = raw_dataset.select(indices)
+
+        # New code to further split the training dataset into train/test
+        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Test):
+            raw_dataset = raw_dataset.map(
+                lambda example: {"stratify_column": example["answer"][0]}, batched=False
+            )
+
+            train_dataset, test_dataset = (
+                raw_dataset.class_encode_column("stratify_column")
+                .train_test_split(
+                    test_size=0.2,
+                    stratify_by_column="stratify_column",
+                    seed=EXPERIMENT.get_seed(),
+                    shuffle=True
+                )
+                .values()
+            )
+            result = train_dataset if self.split == Suffix.Train else test_dataset
+            
+            logger.info(f"Read {self.split} dataset, length: {len(result)}")
+            return result
+
+        logger.info(f"Read {self.split} dataset, length: {len(raw_dataset)}")
+        return raw_dataset

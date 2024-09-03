@@ -18,6 +18,7 @@ from lib.types import (
     TrainingParameters,
     VQAParameters,
 )
+from lib.trainers.classification_trainer import ClassificationTrainer
 
 
 def show_images_with_captions(
@@ -66,7 +67,7 @@ def show_images_with_captions(
 
 def show_umap_clustering(split, dataset, num_samples=100):
     # Prepare the parameters
-    train_args = VQAParameters(split=split, use_stratified_split=True)
+    train_args = VQAParameters(split=split, use_filtered_split=True)
     state = State()
     root = (
         SAVE_PATHS.BLIP2_Generator_EasyVQA
@@ -100,8 +101,27 @@ def show_umap_clustering(split, dataset, num_samples=100):
     )
 
 
+def visualize_features(split, dataset):
+    train_args = VQAParameters(split=split, use_filtered_split=True)
+    
+    parameters = TrainingParameters(
+        dataset_name=dataset,
+        resume_checkpoint=True,
+        resume_state=False,
+        model_name=ModelTypes.BLIP2Generator,
+        is_trainable=False,
+        train_args=train_args,
+        val_args=None,
+        test_args=None,
+        use_wandb=False,
+    )
+    
+    trainer = ClassificationTrainer(parameters)
+    trainer.train_one_epoch(1)
+
+
 def show_confusion_matrix(split, dataset):
-    args = VQAParameters(split=split, use_stratified_split=True)
+    args = VQAParameters(split=split, use_filtered_split=True)
 
     parameters = TrainingParameters(
         dataset_name=dataset,
@@ -135,11 +155,15 @@ def calculate_cardinality_and_density(dataset):
     print(f"The number of unique labels: {num_unique_labels}")
     label_density = label_cardinality / num_unique_labels
 
+    # Calculate average number of examples per sample
+    avg_examples_per_sample = df["answer"].apply(len).mean()
+
     print(f"Label Cardinality: {label_cardinality}")
     print(f"Label Density: {label_density}")
+    print(f"Average number of labels per sample: {avg_examples_per_sample:.2f}")
 
 
-def calculate_label_frequency(dataset, multilabel=False):
+def calculate_label_frequency(dataset, path, multilabel=False):
     # Flatten the list of labels
     df = dataset.raw_dataset.to_pandas()
     if multilabel:
@@ -154,6 +178,8 @@ def calculate_label_frequency(dataset, multilabel=False):
     label_distribution = pd.DataFrame.from_dict(
         label_counts, orient="index", columns=["Frequency"]
     ).sort_values(by="Frequency", ascending=False)
+    
+    print("Total number of items:\n", len(dataset.raw_dataset))
 
     # Display the top 10 most frequent labels
     print("Top 10 most frequent labels:\n", label_distribution.head(10))
@@ -192,42 +218,140 @@ def calculate_label_frequency(dataset, multilabel=False):
 
     # Update layout
     fig.update_layout(height=800, width=800, title_text="Label Frequency Distribution")
-    fig.show()
+    fig.write_html(f"{path}_label_frequency.html")
 
-    # Visualize the middle ground
-    middle_distribution = label_distribution.reset_index()
-    middle_distribution.columns = ["Label", "Frequency"]
+    # Visualize the scatter plot
+    scatter_distribution = label_distribution.reset_index()
+    scatter_distribution.columns = ["Label", "Frequency"]
 
-    # Create an interactive scatter plot for the middle ground
+    # Create an interactive scatter plot for the scatter plot
     fig = go.Figure(
         data=go.Scatter(
-            x=list(range(len(middle_distribution))),
-            y=middle_distribution["Frequency"],
+            x=list(range(len(scatter_distribution))),
+            y=scatter_distribution["Frequency"],
             mode="markers",
-            text=middle_distribution["Label"],  # Add label names to the hover text
+            text=scatter_distribution["Label"],  # Add label names to the hover text
             hovertemplate="<b>Label:</b> %{text}<br><b>Frequency:</b> %{y}<extra></extra>",
             marker=dict(
                 size=8,
-                color=middle_distribution["Frequency"],
-                colorscale="Viridis",
+                color=scatter_distribution["Frequency"],
+                colorscale="Turbo", 
                 showscale=True,
             ),
         )
     )
 
     fig.update_layout(
-        title="Distribution of Labels in the Middle Ground",
+        title="Distribution of Labels",
         xaxis_title="Label Index",
         yaxis_title="Frequency",
         yaxis_type="log",
     )
-    fig.show()
+    fig.write_html(f"{path}_scatter_plot.html")
 
-    # Print some statistics about the middle ground
-    print(f"Number of labels in the middle ground: {len(middle_distribution)}")
-    print(
-        f"Mean frequency in the middle ground: {middle_distribution['Frequency'].mean():.2f}"
+
+
+def create_label_frequency_boxplot(dataset, path, multilabel=False):
+    # Flatten the list of labels
+    df = dataset.raw_dataset.to_pandas()
+    if multilabel:
+        all_labels = [label for sublist in df["answer"] for label in sublist]
+    else:
+        all_labels = df["answer"]
+
+    # Count the frequency of each label
+    label_counts = Counter(all_labels)
+
+    # Convert to DataFrame for easier analysis
+    all_labels = pd.DataFrame.from_dict(
+        label_counts, orient="index", columns=["Frequency"]
+    ).sort_values(by="Frequency", ascending=False)
+
+    # Calculate Q1, Q3, and IQR
+    Q1 = all_labels['Frequency'].quantile(0.25)
+    Q2 = all_labels['Frequency'].quantile(0.5)
+    Q3 = all_labels['Frequency'].quantile(0.75)
+    IQR = Q3 - Q1
+    
+    print(f"Q1: {Q1}")
+    print(f"Q2: {Q2}")
+    print(f"Q3: {Q3}")
+    print(f"IQR: {IQR}")
+
+    # Define outliers
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    print(f"Lower Whisker: {lower_bound}")
+    print(f"Upper Whisker: {upper_bound}")
+    
+    outliers = all_labels[(all_labels['Frequency'] < lower_bound) | (all_labels['Frequency'] > upper_bound)]
+
+    # Remove outliers from label_distribution
+    label_distribution = all_labels[(all_labels['Frequency'] >= lower_bound) & (all_labels['Frequency'] <= upper_bound)]
+
+    # Create the boxplot
+    fig = go.Figure()
+
+    fig.add_trace(go.Box(
+        x0=0,  # Set x0 to 0 for the box plot
+        y=label_distribution["Frequency"],
+        name="Label Frequencies",
+        boxpoints="all",
+        jitter=0.3,
+        pointpos=-1.8,
+        marker=dict(
+            color="blue",
+            size=4,
+            line=dict(
+                color="darkblue",
+                width=2
+            )
+        ),
+        line=dict(color="darkblue"),
+        hoverinfo="text",
+        hovertext=[f"Label: {label}<br>Frequency: {freq}" for label, freq in label_distribution.itertuples()],
+    ))
+
+    # Highlight outliers
+    fig.add_trace(go.Scatter(
+        x=[-0.4] * len(outliers),  # Set x to a negative value to move outliers left
+        y=outliers["Frequency"],
+        mode="markers",
+        marker=dict(
+            color="red",
+            size=6,
+            symbol="circle-open",
+            line=dict(width=2)
+        ),
+        name="Outliers",
+        hoverinfo="text",
+        hovertext=[f"Label: {label}<br>Frequency: {freq}" for label, freq in outliers.itertuples()],
+    ))
+
+    # Update layout
+    fig.update_layout(
+        title="Label Frequency Distribution Boxplot",
+        yaxis_title="Frequency",
+        showlegend=False,
+        height=600,
+        width=800,
+        xaxis=dict(
+            range=[-0.5, 0.5],  # Set x-axis range to control positioning
+            showticklabels=False,  # Hide x-axis labels
+            zeroline=False,  # Hide zero line
+        ),
     )
-    print(
-        f"Median frequency in the middle ground: {middle_distribution['Frequency'].median():.2f}"
-    )
+
+    # Use log scale for y-axis to better visualize the distribution
+    fig.update_yaxes(type="log")
+
+    # Save the figure as an interactive HTML file
+    fig.write_html(f"{path}_boxplot.html")
+
+    # Print some statistics
+    print(f"Number of unique labels: {len(all_labels)}")
+    print(f"Mean frequency: {all_labels['Frequency'].mean():.2f}")
+    print(f"Median frequency: {all_labels['Frequency'].median():.2f}")
+    print(f"Number of outliers: {len(outliers)}")
+    print(f"Total number of items: {len(dataset.raw_dataset)}")

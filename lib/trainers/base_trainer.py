@@ -15,6 +15,8 @@ from sentence_transformers import SentenceTransformer, util
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrainedModel
+from lib.models.base_classifier import Blip2BaseClassifier
+from lib.models.blip2_generator_experiment1 import Blip2GeneratorExperiment1
 
 import wandb
 from lib.representations import ModelFactory
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class TorchBase(ABC):
-    model: PreTrainedModel
+    model: Blip2BaseClassifier | Blip2GeneratorExperiment1
 
     def __init__(self, config: TrainingParameters):
         # Log information to file
@@ -36,11 +38,10 @@ class TorchBase(ABC):
         self.resume_checkpoint = config.resume_checkpoint
         self.best_path = self.get_save_path()
 
-        if config.use_wandb:
-            if self.resume_checkpoint:
-                wandb_id = read_wandb_id(f"{self.best_path}/wandb_run.txt")
-            else:
-                wandb_id = write_wandb_id(f"{self.best_path}/wandb_run.txt")
+        if self.resume_checkpoint:
+            wandb_id = read_wandb_id(f"{self.best_path}/wandb_run.txt")
+        else:
+            wandb_id = write_wandb_id(f"{self.best_path}/wandb_run.txt")
 
         # The path to store the best model
         self.best_path = self.best_path + f"/{str(wandb_id)}"
@@ -105,7 +106,6 @@ class TorchBase(ABC):
 
         # Repository where to upload the results
         self.repo = self.get_repository()
-
         self.hyperparameters: TrainingParameters = config
         self.hyperparameters.set_optimizer_and_scheduler(self.model)
         self.optimizer = self.hyperparameters.optimizer
@@ -226,9 +226,12 @@ class TorchBase(ABC):
                 print(f"Model Saved{reset} --> {self.best_path}")
 
                 # Push to hub every time a better model is found
-                self.push_to_hub(self.model, self.processor)
+                self.push_to_hub(self.model, self.processor, epoch)
+                self.model.save_statistics(self.best_path)
+                self.model.reset_state()
             else:
                 logger.info(f"{val_loss=}")
+                self.model.reset_state()
 
                 # Saving the epoch which is supposed to be the next
                 self.save_trainer_state(
@@ -260,10 +263,10 @@ class TorchBase(ABC):
 
         return model, history
 
-    def push_to_hub(self, model, processor):
+    def push_to_hub(self, model, processor, epoch):
         loss = self.state.best_epoch_loss
-        model.push_to_hub(self.repo, commit_message=f"Training done {loss=}")
-        processor.push_to_hub(self.repo, commit_message="Training done")
+        model.push_to_hub(self.repo, commit_message=f"New best {loss=}, {epoch=}")
+        processor.push_to_hub(self.repo, commit_message=f"New best {loss=}, {epoch=}")
 
     def train_one_epoch(self, epoch):
         # Set in training mode
@@ -291,7 +294,7 @@ class TorchBase(ABC):
 
             # Add the extract_features parameter only during classification
             if hasattr(self.model, "classifier"):
-                model_kwargs["extract_features"] = epoch == 1
+                model_kwargs["extract_features"] = "train"
 
             # Generate the output trainable params:
             outputs = self.model(**model_kwargs)
@@ -345,15 +348,21 @@ class TorchBase(ABC):
 
                 # Get the batch size
                 batch_size = input_ids.size(0)
+                
+                # Prepare arguments for the model's forward method
+                model_kwargs = {
+                    "input_ids": input_ids,
+                    "pixel_values": pixel_values,
+                    "labels": labels,
+                    "attention_mask": attention_mask,
+                }
+                
+                # Add the extract_features parameter only during classification
+                if hasattr(self.model, "classifier"):
+                    model_kwargs["extract_features"] = "val"
 
-                # Perform generation using the model
-
-                outputs = self.model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    labels=labels,
-                    attention_mask=attention_mask,
-                )
+                outputs = self.model(**model_kwargs)
+                
                 loss = outputs.loss
 
                 self.on_batch_processed(outputs, labels)
