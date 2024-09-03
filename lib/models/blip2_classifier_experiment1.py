@@ -10,32 +10,21 @@ import wandb
 from .base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 from lib.types import DatasetTypes
 
-from .feature_visualizer import FeatureVisualizer
 
 logger = logging.getLogger(__name__)
 
 
 class Blip2ClassifierExperiment1(Blip2BaseClassifier):
-    """This is the first classifier I used. It is a simple MLP classifier on-top of the base model.
-    Uses the last hidden state of the Q-Former and the pooler_output of the vision encoder. Also,
-    the Blip2ForConditionalGeneration model is used to get the features. See:
-    https://huggingface.co/docs/transformers/model_doc/blip-2#transformers.Blip2ForConditionalGeneration
-
-    Args:
-        BaseBlip2Classifier: Configuration storing information about intermediary
-        dimensions and answer space
+    """
+    This is the first classifier I used. It is a simple MLP classifier on-top of the base model.
+    Uses the last hidden state of the Q-Former and the last_hidden_state of the vision encoder.
+    Proceeds to use the mean across the first dimension of the q-former to make the features'
+    dimensions homogenous.
     """
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):
         super().__init__(config, peft_model)
         logger.info(f"{config.interm_dim=}")
-
-        self.answer_space = config.answer_space
-        self.id_to_answer = {
-            idx: answer for idx, answer in enumerate(self.answer_space)
-        }
-
-        self.feature_visualizer = FeatureVisualizer(self.id_to_answer)
 
         # Define dimensions for the combined features
         combined_dim = (
@@ -121,5 +110,3 @@ class Blip2ClassifierExperiment1(Blip2BaseClassifier):
 
         return outputs
 
-    def visualize_with_umap_and_density(self, save_path="umap_density_plot.html"):
-        self.feature_visualizer.visualize_with_umap_and_density(save_path)

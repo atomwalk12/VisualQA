@@ -2,6 +2,9 @@ import argparse
 import logging
 import warnings
 
+import sys
+sys.path.insert(0, "./docs/transformers/transformers/src")
+
 from lib.trainers.base_trainer import TorchBase
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
@@ -40,7 +43,7 @@ def evaluate_model(args):
     if isinstance(args.seed, int):
         EXPERIMENT.set_seed(args.seed).apply_seed()
 
-    test_args = VQAParameters(split=args.test_split, is_testing=True, use_stratified_split=True)
+    test_args = VQAParameters(split=args.test_split, is_testing=True, use_proportional_split=True)
     parameters = TrainingParameters(
         dataset_name=args.dataset,
         resume_checkpoint=True,

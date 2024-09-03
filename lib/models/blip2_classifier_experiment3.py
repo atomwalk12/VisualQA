@@ -10,14 +10,8 @@ from .base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 logger = logging.getLogger(__name__)
 
 class Blip2ClassifierExperiment3(Blip2BaseClassifier):
-    """This is the third classifier I used. It is a simple MLP classifier however the pooler_output
-    features are being used instead of the last hidden state. Also, the Blip2ForConditionalGeneration
-    model is used to get the features. See:
-    https://huggingface.co/docs/transformers/model_doc/blip-2#transformers.Blip2ForConditionalGeneration
-
-    Args:
-        BaseBlip2Classifier: Configuration storing information about intermediary
-        dimensions and answer space.
+    """This is the third classifier I used. It is a MLP classifier however the pooler_output
+    of the qformer are being used instead of the last hidden state.
     """
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):

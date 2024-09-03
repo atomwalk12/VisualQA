@@ -3,6 +3,9 @@ import gc
 import logging
 import warnings
 
+import sys
+sys.path.insert(0, "./docs/transformers/transformers/src")
+
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
 from lib.types import (
@@ -14,6 +17,9 @@ from lib.types import (
     DatasetTypes,
 )
 from lib.utils import EXPERIMENT
+
+
+
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -85,8 +91,8 @@ def main(args: argparse.Namespace):
         EXPERIMENT.set_seed(args.seed).apply_seed()
 
     logger.info("Fine tuning using Torch Trainer")
-    train_args = VQAParameters(split=args.train_split, use_stratified_split=True)
-    val_args = VQAParameters(split=args.val_split, use_stratified_split=True)
+    train_args = VQAParameters(split=args.train_split, use_proportional_split=True)
+    val_args = VQAParameters(split=args.val_split, use_proportional_split=True)
     parameters = TrainingParameters(
         num_epochs=args.num_epochs,
         resume_checkpoint=args.resume_training,
@@ -96,7 +102,8 @@ def main(args: argparse.Namespace):
         train_args=train_args,
         val_args=val_args,
         test_args=None,
-        resume_state=False
+        resume_state=False,
+        scheduler_name="CosineAnnealingWarmRestarts" if args.model == ModelTypes.BLIP2Generator else "CosineAnnealingLR"
     )
 
     if args.model == ModelTypes.BLIP2Generator or args.model == ModelTypes.BLIP2FinetunedGenerator:

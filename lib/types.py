@@ -1,6 +1,5 @@
 import logging
 import pickle
-import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -10,10 +9,10 @@ from pathlib import Path
 import evaluate
 import numpy as np
 import pandas as pd
+import torch
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
-from transformers import (Blip2ForConditionalGeneration, Blip2Model,
-                          Blip2Processor)
+from transformers import Blip2ForConditionalGeneration, Blip2Processor, Blip2ForImageTextRetrieval, AutoProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +51,20 @@ class ModelTypes(StrEnum):
 class HFRepos(StrEnum):
     BLIP2_OPT = "Salesforce/blip2-opt-2.7b"
     BLIP2_COCO = "Salesforce/blip2-opt-2.7b-coco"
+    BLIP2_ITM = "Salesforce/blip2-itm-vit-g"
 
 
 class Suffix(StrEnum):
     Test = "test"
     Train = "train"
     Val = "val"
+    All = "all"
 
 
 # Mapping from model types to repo IDs
 MODEL_REPO_MAPPING = {
     ModelTypes.BLIP2Generator: HFRepos.BLIP2_OPT.value,
-    ModelTypes.BLIP2Classifier: HFRepos.BLIP2_OPT.value,
+    ModelTypes.BLIP2Classifier: HFRepos.BLIP2_ITM.value,
     ModelTypes.BLIP2FinetunedClassifier: HFRepos.BLIP2_COCO.value,
     ModelTypes.BLIP2FinetunedGenerator: HFRepos.BLIP2_COCO.value,
 }
@@ -73,12 +74,12 @@ MODEL_CLASS_MAPPING = {
     ModelTypes.BLIP2FinetunedGenerator: Blip2ForConditionalGeneration,
     ModelTypes.BLIP2FinetunedClassifier: Blip2ForConditionalGeneration,
     ModelTypes.BLIP2Generator: Blip2ForConditionalGeneration,
-    ModelTypes.BLIP2Classifier: Blip2ForConditionalGeneration,
+    ModelTypes.BLIP2Classifier: Blip2ForImageTextRetrieval,
 }
 
 PROCESSOR_CLASS_MAPPING = {
     ModelTypes.BLIP2Generator: Blip2Processor,
-    ModelTypes.BLIP2Classifier: Blip2Processor,
+    ModelTypes.BLIP2Classifier: AutoProcessor,
     ModelTypes.BLIP2FinetunedGenerator: Blip2Processor,
     ModelTypes.BLIP2FinetunedClassifier: Blip2Processor,
 }
@@ -95,7 +96,7 @@ class SAVE_PATHS(StrEnum):
         Path(SAVE_PATHS.BLIP2_Classifier_EasyVQA).mkdir(parents=True, exist_ok=True)
         Path(SAVE_PATHS.BLIP2_Generator_DAQUAR).mkdir(parents=True, exist_ok=True)
         Path(SAVE_PATHS.BLIP2_Classifier_DAQUAR).mkdir(parents=True, exist_ok=True)
-    
+
     @staticmethod
     def make_dir(dir):
         Path(dir).mkdir(parents=True, exist_ok=True)
@@ -189,8 +190,42 @@ class VQAParameters:
     is_testing: bool = False
     processor: Blip2Processor = None
     recompute: bool = False
-    use_stratified_split: bool = False
+    use_filtered_split: bool = False
+    use_proportional_split: bool = False
     keep_infrequent: bool = False
+
+    def __hash__(self):
+        return hash(
+            (
+                self.split,
+                self.is_testing,
+                self.recompute,
+                self.use_filtered_split,
+                self.use_proportional_split,
+                self.keep_infrequent,
+            )
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, VQAParameters):
+            return False
+        return (
+            self.split == other.split
+            and self.is_testing == other.is_testing
+            and self.recompute == other.recompute
+            and self.use_filtered_split == other.use_filtered_split
+            and self.use_proportional_split == other.use_proportional_split
+            and self.keep_infrequent == other.keep_infrequent
+        )
+
+@dataclass
+class Blip2ClassificationModelOutput:
+    loss: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
+    text_embeds: torch.FloatTensor = None
+    image_embeds: torch.FloatTensor = None
+    text_model_output: torch.FloatTensor = None
+    vision_model_output: torch.FloatTensor = None
 
 
 @dataclass
@@ -212,7 +247,7 @@ class TrainingParameters:
     resume_state: bool = True
     lora_config = None
     bnb_config = None
-    
+
     @property
     def _resume_state(self) -> int:
         """Getter for my_property."""
@@ -243,16 +278,22 @@ class TrainingParameters:
     optimizer_name: str = "AdamW"
     scheduler_name: str = "CosineAnnealingLR"
     n_accumulate: int = 1
-    train_batch_size: int = 40
-    val_batch_size: int = 40
+    train_batch_size: int = 64
+    val_batch_size: int = 64
     test_batch_size: int = 1
     optimizer: AdamW = None
     scheduler: lr_scheduler.CosineAnnealingLR = None
 
     def set_optimizer_and_scheduler(self, model):
-        self.optimizer = self.fetch_optimizer(model)
-        self.scheduler = self.fetch_scheduler(self.optimizer)
-
+        if self.optimizer_name == "AdamW" and self.scheduler_name == "CosineAnnealingLR":
+            self.optimizer = self.fetch_optimizer(model)
+            self.scheduler = self.fetch_scheduler(self.optimizer)
+        elif self.optimizer_name == "AdamW" and self.scheduler_name == "CosineAnnealingWarmRestarts":
+            self.optimizer = self.fetch_optimizer(model, lr=5e-5, weight_decay=0.001)
+            self.scheduler = self.fetch_scheduler(self.optimizer)
+        else:
+            raise ValueError(f"Optimizer {self.optimizer_name} and scheduler {self.scheduler_name} not implemented")
+        
     def fetch_optimizer(self, model, lr=1e-4, weight_decay=1e-6):
         assert self.optimizer_name == "AdamW", "Optimizer not implemented"
 
@@ -261,7 +302,9 @@ class TrainingParameters:
 
     def fetch_scheduler(self, optimizer, t_max=500, min_lr=1e-6, T_0=15):
         if self.scheduler_name == "CosineAnnealingLR":
-            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=t_max, eta_min=min_lr)
+            scheduler = lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=t_max, eta_min=min_lr
+            )
         elif self.scheduler_name == "CosineAnnealingWarmRestarts":
             scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=T_0, eta_min=min_lr)
         elif self.scheduler_name is None:
@@ -287,5 +330,5 @@ class BertScoreMetric(Metric):
             logger.info(f"val_bertscore_f1: {np.mean(scores["f1"])}")
             logger.info(f"val_bertscore_precision: {np.mean(scores["precision"])}")
             logger.info(f"val_bertscore_f1: {np.mean(scores["f1"])}")
-            
+
         return scores

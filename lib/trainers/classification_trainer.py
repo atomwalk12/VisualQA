@@ -15,6 +15,7 @@ from ..daquar.daquar_classification import DaquarClassification
 from ..easy_vqa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 from ..models.blip2_classifier_experiment1 import Blip2ClassifierExperiment1
+from ..models.blip2_classifier_experiment5 import Blip2ClassifierExperiment
 from ..representations import ModelFactory, ModelTypes
 from ..types import SAVE_PATHS, DatasetTypes, FileNames, Suffix, TrainingParameters
 from ..utils import ClassificationMetricsAccumulator
@@ -28,12 +29,12 @@ class ClassificationTrainer(TorchBase):
         super().__init__(config)
 
         self.train_accumulator = ClassificationMetricsAccumulator(
-            self.dataset_name, self.answer_space, Suffix.Train, update_frequency=16
+            self.dataset_name, self.answer_space, Suffix.Train, update_frequency=1
         )
         self.val_accumulator = ClassificationMetricsAccumulator(
             self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1
         )
-        self.update_frequency = 64
+        self.state_update_frequency = 1
 
     def get_repository(self):
         if self.dataset_name == DatasetTypes.EASY_VQA:
@@ -60,7 +61,7 @@ class ClassificationTrainer(TorchBase):
             self.model_name == ModelTypes.BLIP2Classifier
             or self.model_name == ModelTypes.BLIP2FinetunedClassifier
         ):
-            model = Blip2ClassifierExperiment1.from_pretrained(
+            model = Blip2ClassifierExperiment.from_pretrained(
                 base_model,
                 local_model_path,
                 adapter_name="vqa_classification",
@@ -99,7 +100,7 @@ class ClassificationTrainer(TorchBase):
                 answer_space=answer_space,
                 dataset_name=self.dataset_name,
             )
-            model = Blip2ClassifierExperiment1(config, model)
+            model = Blip2ClassifierExperiment(config, model)
 
         return model
 
@@ -145,7 +146,7 @@ class ClassificationTrainer(TorchBase):
                 bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
 
                 # Save the state
-                if step % self.update_frequency == 0:
+                if step % self.state_update_frequency == 0:
                     self.save_trainer_state(
                         best_epoch_loss,
                         history,
@@ -187,7 +188,7 @@ class ClassificationTrainer(TorchBase):
         self, best_epoch_loss, history, epoch, dataloader: DataLoader
     ):  # noqa: F821
         # This should always be true, but checking for intellisense completion.
-        assert isinstance(self.model, Blip2)
+        assert isinstance(self.model, Blip2BaseClassifier)
 
         # retrieve model's state and save to file
         self.state.save_state(
@@ -229,23 +230,14 @@ class ClassificationTrainer(TorchBase):
             )
         elif self.dataset_name == DatasetTypes.EASY_VQA:
             return LoraConfig(
-                r=16,
-                lora_alpha=32,
+                r=8,
+                lora_alpha=8,
                 lora_dropout=0.1,
                 target_modules="all-linear",
                 init_lora_weights="gaussian",
             )
 
     def on_batch_processed(self, y_pred, y_true):
-        # TODO[RF] gradients and weights
-        # # Log weights (corrected)
-        # for name, param in self.model.classifier.named_parameters():
-        #     wandb.log({f"weights/{name}": wandb.Histogram(param.detach().cpu().numpy())})
-
-        # # Log gradients (already handled correctly)
-        # for name, param in self.model.classifier.named_parameters():
-        #     if param.grad is not None:
-        #         wandb.log({f"gradients/{name}": wandb.Histogram(param.grad.detach().cpu().numpy())})
         if self.dataset_name == DatasetTypes.EASY_VQA:
             if self.model.training:
                 self.train_accumulator.log_multi_class_statistics(y_pred, y_true)

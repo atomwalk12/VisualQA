@@ -11,14 +11,11 @@ from .base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 logger = logging.getLogger(__name__)
 
 class Blip2ClassifierExperiment2(Blip2BaseClassifier):
-    """This is the second classifier I used. It is still a simple MLP classifier, however the 
-    output is projected using two intermediate linear to make the input homogenous. Also, the
-    Blip2ForConditionalGeneration model is used to get the features. See:
-    https://huggingface.co/docs/transformers/model_doc/blip-2#transformers.Blip2ForConditionalGeneration
-
-    Args:
-        BaseBlip2Classifier: Configuration storing information about intermediary
-        dimensions and answer space.
+    """
+    This is the second classifier I used. It is still a MLP classifier, however the 
+    output is projected using two intermediate linear layers to make the input homogenous.
+    This contrasts with the Experiment 1 which uses a mean average to make the features
+    compatible.
     """
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):
@@ -30,8 +27,10 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
         self.qformer_norm = nn.LayerNorm(config.qformer_config.hidden_size)  # 768
         self.vit_norm = nn.LayerNorm(config.vision_config.hidden_size)  # 1408
 
-        self.qformer_proj = nn.Linear(config.qformer_config.hidden_size, 512)
-        self.vit_proj = nn.Linear(config.vision_config.hidden_size, 1024)
+        self.qformer_proj = nn.Linear(config.qformer_config.hidden_size, 256)
+        self.vit_proj = nn.Linear(config.vision_config.hidden_size, 256)
+        
+        self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
 
         self.classifier = nn.Sequential(
             nn.Linear(512 + 1024, config.interm_dim),  # 32 x 768
@@ -40,6 +39,7 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
             nn.Dropout(0.5),
             nn.Linear(config.interm_dim, self.answer_space_dim),
         )
+        
 
     def forward(
         self,
@@ -55,18 +55,30 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
             labels=input_ids,
             attention_mask=attention_mask,
         )
-        vit_features = outputs.vision_outputs.last_hidden_state.mean(dim=1)
-        qformer_features = outputs.qformer_outputs["last_hidden_state"].mean(dim=1)
+        
+        # Process QFormer features
+        qformer_features = outputs.qformer_outputs.last_hidden_state
+        text_embeds = self.text_projection(qformer_features)
+        text_embeds = nn.functional.normalize(text_embeds, dim=-1)
+        
+        # Process Vision features
+        pooled_output = outputs.vision_outputs.last_hidden_state
+        image_attention_mask = torch.ones(pooled_output.size()[:-1], dtype=torch.long, device=pooled_output.device)
+        
+        query_tokens = self.query_tokens.expand(pooled_output.shape[0], -1, -1)
+        
+        query_outputs = self.model.qformer(
+            query_embeds=query_tokens,
+            encoder_hidden_states=pooled_output,
+            encoder_attention_mask=image_attention_mask
+        )
+
+        embeds = query_outputs.last_hidden_state
+        image_embeds = self.vision_projection(embeds)
+        image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+        
         # Normalize features
-        qformer_features = self.qformer_norm(qformer_features)
-        vit_features = self.vit_norm(vit_features)
-
-        # Project features to same dimension
-        qformer_features = self.qformer_proj(qformer_features)
-        vit_features = self.vit_proj(vit_features)
-
-        # concatenate features
-        combined_features = torch.cat((qformer_features, vit_features), dim=-1)
+        combined_features = torch.cat((text_embeds, image_embeds), dim=1)
 
         # Classification
         logits = self.classifier(combined_features)

@@ -21,13 +21,9 @@ class Result:
 
 
 class Blip2ClassifierExperiment4(Blip2BaseClassifier):
-    """This is the fourth classifier I used. The main idea is that I don't use the Blip2ForConditionalGeneration
-    model to get the features. Instead, I use the Blip2 model to get the features.
-    See https://huggingface.co/docs/transformers/model_doc/blip-2#transformers.Blip2Model
-
-    Args:
-        Blip2BaseClassifier: Configuration storing information about intermediary
-        dimensions and answer space.
+    """This is the fourth classifier I used. The main idea is that I did not use the 
+    Blip2ForConditionalGeneration model to get the features. Instead, I use the Blip2 
+    model's features, a model not conceived for VQA (it does not contain the LLM).
     """
     config_class = Blip2ClassifierConfig
 

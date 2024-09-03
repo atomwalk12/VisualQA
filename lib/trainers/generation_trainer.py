@@ -25,14 +25,16 @@ from ..representations import ModelFactory
 from ..types import SAVE_PATHS, DatasetTypes, Suffix, TrainingParameters
 from .base_trainer import TorchBase
 
+from ..models.blip2_generator_experiment1 import Blip2GeneratorExperiment1
+
 logger = logging.getLogger(__name__)
 
 
 class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
-        self.update_frequency = 64
-        self.train_accumulator = GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Train, update_frequency=16)
+        self.state_update_frequency = 32
+        self.train_accumulator = GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Train, update_frequency=1)
         self.val_accumulator =  GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Val, update_frequency=1)
 
     def get_repository(self):
@@ -64,7 +66,10 @@ class GenerationTrainer(TorchBase):
         return model
 
     def bootstrap_model(self, answer_space):
-        model = self.get_models(apply_lora=True)
+        model = self.get_models(apply_lora=True)            
+
+        model = Blip2GeneratorExperiment1(model)
+        
         return model
     
     def test(self):
@@ -107,7 +112,7 @@ class GenerationTrainer(TorchBase):
                 bar.set_postfix(Batch=step, Accuracy=similarity)
 
                 # Save the state
-                if step % self.update_frequency == 0:
+                if step % self.state_update_frequency == 0:
                     self.save_trainer_state(similarity, history, step + 1, self.test_dataloader)
 
         # Finally save the entire run results
