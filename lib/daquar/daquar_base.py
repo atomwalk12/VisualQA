@@ -159,7 +159,7 @@ class DaquarDatasetBase(DatabaseBase):
         return raw_dataset
 
     def initialize_filtered_dataset(self):
-        """Method to initialize the dataset with proper multi-label handling."""
+        """Method to initialize the dataset with proper multi-label or multi-class handling."""
 
         raw_dataset = self.combine_datasets()
 
@@ -183,11 +183,17 @@ class DaquarDatasetBase(DatabaseBase):
 
         filtered_dataset = raw_dataset.filter(filter_valid_labels)
 
-        # Update the answers to include only valid labels
+        # Update the answers based on the classification type
         def update_answers(example):
-            example["answer"] = [
+            valid_answers = [
                 answer for answer in example["answer"] if answer in valid_labels
             ]
+            if self.multi_class_classifier:
+                # For multi-class, select the first valid answer
+                example["answer"] = [valid_answers[0]] if valid_answers else []
+            else:
+                # For multi-label, keep all valid answers
+                example["answer"] = valid_answers
             return example
 
         final_dataset = filtered_dataset.map(update_answers)
@@ -195,6 +201,7 @@ class DaquarDatasetBase(DatabaseBase):
         logger.info(f"Original dataset size: {len(raw_dataset)}")
         logger.info(f"Filtered dataset size: {len(final_dataset)}")
         logger.info(f"Number of unique labels after filtering: {len(valid_labels)}")
+        logger.info(f"Classification type: {'Multi-class' if self.multi_class_classifier else 'Multi-label'}")
 
         return final_dataset
 
@@ -232,8 +239,14 @@ class DaquarDatasetBase(DatabaseBase):
         y = []
         with tqdm(total=total_examples, desc="Creating label matrix", unit="example") as pbar:
             for example in raw_dataset:
-                y.append([1 if label in example['answer'] else 0 for label in all_labels])
+                if self.multi_class_classifier:
+                    # For multi-class, use one-hot encoding
+                    y.append([1 if label == example['answer'][0] else 0 for label in all_labels])
+                else:
+                    # For multi-label, use multi-hot encoding
+                    y.append([1 if label in example['answer'] else 0 for label in all_labels])
                 pbar.update(1)
+                
         y = np.array(y)
 
         # Create a dummy feature matrix (just using indices)

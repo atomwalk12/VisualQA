@@ -91,8 +91,8 @@ def main(args: argparse.Namespace):
         EXPERIMENT.set_seed(args.seed).apply_seed()
 
     logger.info("Fine tuning using Torch Trainer")
-    train_args = VQAParameters(split=args.train_split, use_proportional_split=True)
-    val_args = VQAParameters(split=args.val_split, use_proportional_split=True)
+    train_args = VQAParameters(split=args.train_split, use_proportional_split=True, multi_class_classifier=True)
+    val_args = VQAParameters(split=args.val_split, use_proportional_split=True, multi_class_classifier=True)
     parameters = TrainingParameters(
         num_epochs=args.num_epochs,
         resume_checkpoint=args.resume_training,

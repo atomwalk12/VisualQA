@@ -80,7 +80,7 @@ class ClassificationMetricsAccumulator:
         predictions = torch.argmax(probs, dim=-1)
         targets = torch.argmax(targets, dim=1)
 
-        self._accumulate_data(targets, predictions)
+        self._accumulate_data_multi_class(targets, predictions)
 
         if self.iteration % self.update_frequency == 0:
             self.report_multi_class_statistics()
@@ -152,20 +152,34 @@ class ClassificationMetricsAccumulator:
         threshold = probs.mean()  # Use the mean probability as the threshold
         predictions_adaptive = (probs > threshold).int()
 
-        # Method 2: Top-K Selection
-        k = 3  # Select top 3 labels for each sample
-        _, top_k_indices = torch.topk(probs, k, dim=1)
-        predictions_top_k = torch.zeros_like(probs)
-        predictions_top_k.scatter_(1, top_k_indices, 1)
+        # Method 2: Top-3 Selection
+        k = 3 
+        _, top_3_indices = torch.topk(probs, k, dim=1)
+        predictions_top_3 = torch.zeros_like(probs)
+        predictions_top_3.scatter_(1, top_3_indices, 1)
+        
+        # Method 2: Top-2 Selection
+        k = 2
+        _, top_2_indices = torch.topk(probs, k, dim=1)
+        predictions_top_2 = torch.zeros_like(probs)
+        predictions_top_2.scatter_(1, top_2_indices, 1)
+        
+        # Method 2: Top-1 Selection
+        k = 1
+        _, top_1_indices = torch.topk(probs, k, dim=1)
+        predictions_top_1 = torch.zeros_like(probs)
+        predictions_top_1.scatter_(1, top_1_indices, 1)
 
         # Method 3: Percentile Thresholding
         percentile_threshold = np.percentile(probs.numpy(), 70)  # 70th percentile
         predictions_percentile = (probs > percentile_threshold).int()
 
         # Store all types of predictions
-        self._accumulate_data(targets, {
+        self._accumulate_data_multi_label(targets, {
             'adaptive': predictions_adaptive,
-            'top_k': predictions_top_k,
+            'top_3': predictions_top_3,
+            'top_2': predictions_top_2,
+            'top_1': predictions_top_1,
             'percentile': predictions_percentile
         })
 
@@ -177,7 +191,7 @@ class ClassificationMetricsAccumulator:
             targets = torch.stack([t for t, _ in self.accumulated_predictions])
             predictions = {
                 method: torch.stack([p[method] for _, p in self.accumulated_predictions])
-                for method in ['adaptive', 'top_k', 'percentile']
+                for method in ['adaptive', 'top_3', 'top_2', 'top_1', 'percentile']
             }
 
             # Squeeze the extra dimension
@@ -216,15 +230,15 @@ class ClassificationMetricsAccumulator:
         self.accumulated_predictions_epoch = []
         self.accumulated_targets_epoch = []
         self.epoch += 1
+    
+    def _accumulate_data_multi_label(self, targets, predictions):
+        self.accumulated_predictions.extend(predictions)
+        self.accumulated_targets.extend(targets)
+        self.accumulated_predictions_epoch.extend(predictions)
+        self.accumulated_targets_epoch.extend(targets)
 
-    def _accumulate_data(self, targets, predictions):
-        if self.dataset_name == DatasetTypes.DAQUAR:
-            self.accumulated_predictions.append((targets, predictions))
-        elif self.dataset_name == DatasetTypes.EASY_VQA:
-            self.accumulated_predictions.extend(predictions)
-            self.accumulated_targets.extend(targets)
-            self.accumulated_predictions_epoch.extend(predictions)
-            self.accumulated_targets_epoch.extend(targets)
+    def _accumulate_data_multi_class(self, targets, predictions):
+        self.accumulated_predictions.append((targets, predictions))
 
 
 class GeneratorMetricsAccumulator:

@@ -25,6 +25,7 @@ class DatabaseBase(CustomDataset, ABC):
         super().__init__(params.split)
         self.dataset_name = dataset_name
         self.params = params
+        self.multi_class_classifier = params.multi_class_classifier
 
         assert params.processor is not None
 
@@ -52,6 +53,7 @@ class DatabaseBase(CustomDataset, ABC):
 
         self.is_testing = params.is_testing
         self.use_raw_dataset = False
+        
 
     def initialize_dataset(self):
         # Prepare the dataset for training

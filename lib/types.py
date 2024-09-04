@@ -193,6 +193,7 @@ class VQAParameters:
     use_filtered_split: bool = False
     use_proportional_split: bool = False
     keep_infrequent: bool = False
+    multi_class_classifier: bool = True
 
     def __hash__(self):
         return hash(

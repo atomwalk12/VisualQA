@@ -28,6 +28,7 @@ class Blip2ClassifierConfig(Blip2Config):
         classification_input_dim=0,
         base_model_name="blip2",
         interm_dim=1024,
+        multi_class_classifier=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -36,6 +37,7 @@ class Blip2ClassifierConfig(Blip2Config):
         self.classification_input_dim = classification_input_dim
         self.answer_space = answer_space
         self.dataset_name = dataset_name
+        self.multi_class_classifier = multi_class_classifier
 
 
 class Blip2BaseClassifier(PreTrainedModel):
@@ -114,12 +116,10 @@ class Blip2BaseClassifier(PreTrainedModel):
         return model
 
     def set_criterion(self):
-        if self.config.dataset_name == DatasetTypes.EASY_VQA:
+        if self.config.multi_class_classifier:
             self.criterion = nn.CrossEntropyLoss()
-        elif self.config.dataset_name == DatasetTypes.DAQUAR:
-            self.criterion = nn.BCEWithLogitsLoss()
         else:
-            raise KeyError(f"Unsupported dataset: {self.config.dataset_name}")
+            self.criterion = nn.BCEWithLogitsLoss()
 
     def initialize_weights(self, layer):
         if isinstance(layer, nn.Linear):
