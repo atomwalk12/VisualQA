@@ -58,7 +58,7 @@ def format_time(seconds):
 
 class ClassificationMetricsAccumulator:
 
-    def __init__(self, dataset_name, answer_space, name, update_frequency):
+    def __init__(self, dataset_name, answer_space, name, update_frequency, plot_confusion_matrix=True):
         self.dataset_name = dataset_name
         self.accumulated_targets = []
         self.accumulated_predictions = []
@@ -69,6 +69,7 @@ class ClassificationMetricsAccumulator:
         self.epoch = 1
         self.name = name
         self.update_frequency = update_frequency
+        self.plot_confusion_matrix = plot_confusion_matrix
 
     def log_multi_class_statistics(self, y_pred, y_true):
         logits = y_pred.logits.clone().detach().cpu()
@@ -215,29 +216,31 @@ class ClassificationMetricsAccumulator:
         self.accumulated_predictions = []
 
     def log_confusion_matrix(self):
-        title = f"{self.epoch}_{self.name}_Confusion_Matrix"
-        wandb.log(
-            {
-                title: wandb.plot.confusion_matrix(
-                    probs=None,
-                    y_true=[t.numpy().item() for t in self.accumulated_targets_epoch],
-                    preds=[p.numpy().item() for p in self.accumulated_predictions_epoch],
-                    class_names=self.answer_space,
-                    title=title,
-                )
-            }
-        )
+        if self.plot_confusion_matrix:
+            title = f"{self.epoch}_{self.name}_Confusion_Matrix"
+            wandb.log(
+                {
+                    title: wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=[t.numpy().item() for t in self.accumulated_targets_epoch],
+                        preds=[p.numpy().item() for p in self.accumulated_predictions_epoch],
+                        class_names=self.answer_space,
+                        title=title,
+                    )
+                }
+            )
         self.accumulated_predictions_epoch = []
         self.accumulated_targets_epoch = []
         self.epoch += 1
     
-    def _accumulate_data_multi_label(self, targets, predictions):
+    def _accumulate_data_multi_class(self, targets, predictions):
         self.accumulated_predictions.extend(predictions)
         self.accumulated_targets.extend(targets)
-        self.accumulated_predictions_epoch.extend(predictions)
-        self.accumulated_targets_epoch.extend(targets)
+        if self.plot_confusion_matrix:
+            self.accumulated_predictions_epoch.extend(predictions)
+            self.accumulated_targets_epoch.extend(targets)
 
-    def _accumulate_data_multi_class(self, targets, predictions):
+    def _accumulate_data_multi_label(self, targets, predictions):
         self.accumulated_predictions.append((targets, predictions))
 
 

@@ -27,15 +27,17 @@ logger = logging.getLogger(__name__)
 class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
+        plot_confusion_matrix = self.dataset_name == DatasetTypes.EASY_VQA
 
         self.train_accumulator = ClassificationMetricsAccumulator(
-            self.dataset_name, self.answer_space, Suffix.Train, update_frequency=1
+            self.dataset_name, self.answer_space, Suffix.Train, update_frequency=1, plot_confusion_matrix=plot_confusion_matrix
         )
         self.val_accumulator = ClassificationMetricsAccumulator(
-            self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1
+            self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1, plot_confusion_matrix=plot_confusion_matrix
         )
         self.state_update_frequency = 1
         self.multi_class_classifier = config.train_args.multi_class_classifier
+
 
     def get_repository(self):
         if self.dataset_name == DatasetTypes.EASY_VQA:
