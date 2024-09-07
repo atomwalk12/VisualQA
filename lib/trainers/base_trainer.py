@@ -134,7 +134,7 @@ class TorchBase(ABC):
                 shuffle=True,
                 worker_init_fn=EXPERIMENT.seed_worker,
                 generator=EXPERIMENT.get_generator(),
-                num_workers=params.num_train_workers,
+                num_workers=params.num_val_workers,
             )
             self.answer_space = train_dataset.answer_space
 
@@ -226,7 +226,10 @@ class TorchBase(ABC):
                 print(f"Model Saved{reset} --> {self.best_path}")
 
                 # Push to hub every time a better model is found
-                self.push_to_hub(self.model, self.processor, epoch)
+                try:
+                    self.push_to_hub(self.model, self.processor, epoch)
+                except Exception as e:
+                    logger.error(f"Failed to push to hub: {e}")
                 self.model.save_statistics(self.best_path)
                 self.model.reset_state()
             else:

@@ -28,10 +28,8 @@ class DatabaseBase(CustomDataset, ABC):
         self.multi_class_classifier = params.multi_class_classifier
 
         assert params.processor is not None
-
+        self.min_class_size = 200
         self.padding_max_length = self.get_padding_max_length()
-
-        self.min_class_size = 50
 
         # Store the answer space for commodity
         self.answer_space = self._get_answers()
@@ -50,6 +48,7 @@ class DatabaseBase(CustomDataset, ABC):
             self.load()
         else:
             self.initialize_dataset()
+            self.save()
 
         self.is_testing = params.is_testing
         self.use_raw_dataset = False

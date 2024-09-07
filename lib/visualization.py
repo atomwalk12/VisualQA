@@ -7,6 +7,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from PIL.Image import Image
 from plotly.subplots import make_subplots
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler
 
 from lib.trainers.visualizer import VisualizeClassifier, VisualizeGenerator
 from lib.types import (
@@ -18,6 +20,9 @@ from lib.types import (
     TrainingParameters,
     VQAParameters,
 )
+import math
+import random
+import torch
 from lib.trainers.classification_trainer import ClassificationTrainer
 
 
@@ -255,9 +260,12 @@ def create_label_frequency_boxplot(dataset, path, multilabel=False):
     # Flatten the list of labels
     df = dataset.raw_dataset.to_pandas()
     if multilabel:
-        all_labels = [label for sublist in df["answer"] for label in sublist]
+        all_labels = [label for labels in df["answer"] for label in labels]
     else:
         all_labels = df["answer"]
+
+    # The output needs to be hashable due to using the Counter below
+    all_labels = [tuple(label) if isinstance(label, np.ndarray) else label for label in all_labels]
 
     # Count the frequency of each label
     label_counts = Counter(all_labels)
@@ -355,3 +363,93 @@ def create_label_frequency_boxplot(dataset, path, multilabel=False):
     print(f"Median frequency: {all_labels['Frequency'].median():.2f}")
     print(f"Number of outliers: {len(outliers)}")
     print(f"Total number of items: {len(dataset.raw_dataset)}")
+    
+
+
+def display_sample_images(dataset, dataset_name, num_images=20):
+    # Get random indices
+    indices = random.sample(range(len(dataset)), num_images)
+    
+    # Calculate the number of rows and columns
+    cols = 5  # We'll keep 5 columns as in the original
+    rows = math.ceil(num_images / cols)
+    
+    # Set up the plot
+    fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
+    fig.suptitle(f"Sample Images from {dataset_name} Dataset", fontsize=16)
+    
+    # Flatten axes if it's a 2D array
+    axes = axes.flatten() if num_images > cols else [axes]
+    
+    for i, (idx, ax) in enumerate(zip(indices, axes)):
+        if i < num_images:
+            example = dataset[idx]
+            
+            # Convert image tensor to PIL Image if necessary
+            image = example['image']
+            
+            # Display the image
+            ax.imshow(image)
+            ax.axis('off')
+            
+            # Add question and answer as title
+            question = example['question']
+            answer = example['answer']
+            ax.set_title(f"Q: {question}\nA: {answer}", fontsize=8, wrap=True)
+        else:
+            # Remove unused subplots
+            fig.delaxes(ax)
+    
+    plt.tight_layout()
+    
+    # Save the figure as a PDF
+    pdf_filename = f"{dataset_name}_sample_images.pdf"
+    plt.savefig(pdf_filename, format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()  # Close the figure to free up memory
+    
+    print(f"Sample images saved as {pdf_filename}")
+
+
+def show_class_prediction_heatmap(encodings, labels, unique_labels_array, answer_to_id, split, dataset_name):
+    # Convert list of tensors to a single numpy array
+    encodings_np = np.concatenate([tensor.cpu().detach().numpy() for tensor in encodings], axis=0)
+    
+    # Apply softmax to convert logits to probabilities
+    probabilities = np.exp(encodings_np) / np.sum(np.exp(encodings_np), axis=1, keepdims=True)
+    
+    # Convert one-hot encoded labels to class indices
+    flattened_labels = np.argmax(np.concatenate([batch_labels.cpu().numpy() for batch_labels in labels], axis=0), axis=1)
+    
+    # Calculate average probabilities for each true class
+    avg_probabilities = np.zeros((len(unique_labels_array), encodings_np.shape[1]))
+    for i, label in enumerate(unique_labels_array):
+        label_mask = flattened_labels == answer_to_id[label]
+        if np.any(label_mask):
+            avg_probabilities[i] = np.mean(probabilities[label_mask], axis=0)
+    
+    # Create the heatmap
+    plt.figure(figsize=(20, 16))
+    ax = sns.heatmap(avg_probabilities, annot=True, fmt='.2f', cmap='RdYlBu_r',
+                     xticklabels=unique_labels_array, yticklabels=unique_labels_array,
+                     cbar_kws={'label': 'Fraction of misclassifications'})
+    
+    # Rotate x-axis labels
+    plt.xticks(rotation=90, ha='center')
+    plt.yticks(rotation=0)
+    
+    # Adjust label sizes
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=8)
+    
+    # Set labels and title
+    split = "Validation" if split == "val" else "Training"
+    plt.title(f'{split} Average Class Predictions', fontsize=16, pad=20)
+    plt.xlabel('True Class', fontsize=14, labelpad=10)
+    plt.ylabel('Predicted Class', fontsize=14, labelpad=10)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save the figure
+    plt.savefig(f'{dataset_name}_{split}_class_prediction_heatmap.pdf', dpi=300, bbox_inches='tight')
+    plt.close()

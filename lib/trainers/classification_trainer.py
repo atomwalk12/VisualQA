@@ -14,7 +14,6 @@ from config import Repositories
 from ..daquar.daquar_classification import DaquarClassification
 from ..easy_vqa.easyvqa_classification import EasyVQAClassification
 from ..models.base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
-from ..models.blip2_classifier_experiment1 import Blip2ClassifierExperiment1
 from ..models.blip2_classifier_experiment5 import Blip2ClassifierExperiment
 from ..representations import ModelFactory, ModelTypes
 from ..types import SAVE_PATHS, DatasetTypes, FileNames, Suffix, TrainingParameters
@@ -27,17 +26,22 @@ logger = logging.getLogger(__name__)
 class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
-        plot_confusion_matrix = self.dataset_name == DatasetTypes.EASY_VQA
-
+        self.multi_class = config.train_args.multi_class_classifier
         self.train_accumulator = ClassificationMetricsAccumulator(
-            self.dataset_name, self.answer_space, Suffix.Train, update_frequency=1, plot_confusion_matrix=plot_confusion_matrix
+            self.dataset_name,
+            self.answer_space,
+            Suffix.Train,
+            update_frequency=1,
+            log_confusion_matrix=self.multi_class,
         )
         self.val_accumulator = ClassificationMetricsAccumulator(
-            self.dataset_name, self.answer_space, Suffix.Val, update_frequency=1, plot_confusion_matrix=plot_confusion_matrix
+            self.dataset_name,
+            self.answer_space,
+            Suffix.Val,
+            update_frequency=1,
+            log_confusion_matrix=self.multi_class,
         )
         self.state_update_frequency = 1
-        self.multi_class_classifier = config.train_args.multi_class_classifier
-
 
     def get_repository(self):
         if self.dataset_name == DatasetTypes.EASY_VQA:
@@ -92,7 +96,7 @@ class ClassificationTrainer(TorchBase):
                 classification_input_dim=5120,
                 answer_space=answer_space,
                 dataset_name=self.dataset_name,
-                multi_class_classifier=self.config.train_args.multi_class_classifier
+                multi_class_classifier=self.config.train_args.multi_class_classifier,
             )
             model = Blip2BaseClassifier(config, model)
         elif (
@@ -103,7 +107,7 @@ class ClassificationTrainer(TorchBase):
                 classification_input_dim=768,
                 answer_space=answer_space,
                 dataset_name=self.dataset_name,
-                multi_class_classifier=self.config.train_args.multi_class_classifier
+                multi_class_classifier=self.config.train_args.multi_class_classifier,
             )
             model = Blip2ClassifierExperiment(config, model)
 
@@ -243,7 +247,7 @@ class ClassificationTrainer(TorchBase):
             )
 
     def on_batch_processed(self, y_pred, y_true):
-        if self.multi_class_classifier:
+        if self.multi_class:
             if self.model.training:
                 self.train_accumulator.log_multi_class_statistics(y_pred, y_true)
             else:
@@ -286,7 +290,7 @@ class ClassificationTrainer(TorchBase):
         self.state.history["confusion_labels"] = []
 
     def on_epoch_end(self):
-        if self.multi_class_classifier:
+        if self.multi_class:
             self.train_accumulator.log_confusion_matrix()
             self.val_accumulator.log_confusion_matrix()
             self.train_accumulator.report_multi_class_statistics()
