@@ -1,1 +1,1 @@
-![convergence.gif](docs/convergence.gif)
+![convergence.gif](docs/convergence15.gif)
