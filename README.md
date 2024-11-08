@@ -2,6 +2,10 @@
 
 This repository demonstrates a technique for training the BLIP-2 generative model for classification tasks.
 
+Check out the poster [here](docs/poster.pdf) and the paper [here](docs/report.pdf).
+
+![poster](https://github.com/user-attachments/assets/f65f7c2d-04c1-468c-9e9a-ac7a28122ecb)
+
 ## Results
 
 More training/evaluation metrics can be found in [this report](https://api.wandb.ai/links/razfv07-university-of-bologna/t3nwpt47) on wandb.
