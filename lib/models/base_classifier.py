@@ -14,7 +14,7 @@ import wandb
 from lib.types import DatasetTypes
 
 from .feature_visualizer import FeatureVisualizer
-
+import torch.nn.functional as F
 logger = logging.getLogger(__name__)
 
 
@@ -79,8 +79,8 @@ class Blip2BaseClassifier(PreTrainedModel):
         pickle.dump(self.feature_visualizer.get_features("train"), open(features_path_train, "wb"))
         pickle.dump(self.feature_visualizer.get_features("val"), open(features_path_valid, "wb"))
     
-    def reset_state(self):
-        self.feature_visualizer.reset()
+    def reset_state(self, epoch, is_better):
+        self.feature_visualizer.reset(epoch, is_better)
 
     @classmethod
     def from_pretrained(
@@ -119,6 +119,7 @@ class Blip2BaseClassifier(PreTrainedModel):
         if self.config.multi_class_classifier:
             self.criterion = nn.CrossEntropyLoss()
         else:
+            # self.criterion = FocalLoss()
             self.criterion = nn.BCEWithLogitsLoss()
 
     def initialize_weights(self, layer):
@@ -139,3 +140,24 @@ class Blip2BaseClassifier(PreTrainedModel):
 
     def get_state(self):
         return self.embeddings
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+        self.bce_with_logits = nn.BCEWithLogitsLoss(reduction='none')
+
+    def forward(self, inputs, targets):
+        BCE_loss = self.bce_with_logits(inputs, targets)
+        pt = torch.exp(-BCE_loss)  # prevents nans when probability 0
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+
+        if self.reduction == 'mean':
+            return torch.mean(F_loss)
+        elif self.reduction == 'sum':
+            return torch.sum(F_loss)
+        else:
+            return F_loss

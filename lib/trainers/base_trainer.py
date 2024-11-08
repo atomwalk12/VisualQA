@@ -17,7 +17,7 @@ from tqdm import tqdm
 from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrainedModel
 from lib.models.base_classifier import Blip2BaseClassifier
 from lib.models.blip2_generator_experiment1 import Blip2GeneratorExperiment1
-
+from lib.utils import get_id
 import wandb
 from lib.representations import ModelFactory
 
@@ -85,6 +85,8 @@ class TorchBase(ABC):
 
         if config.use_wandb:
             resume_wandb = "allow" if self.resume_checkpoint else "never"
+            if config.is_testing:
+                wandb_id = get_id()
 
             # Setup wandb and log model properties
             self.run = wandb.init(
@@ -134,7 +136,7 @@ class TorchBase(ABC):
                 shuffle=True,
                 worker_init_fn=EXPERIMENT.seed_worker,
                 generator=EXPERIMENT.get_generator(),
-                num_workers=params.num_val_workers,
+                num_workers=params.num_train_workers,
             )
             self.answer_space = train_dataset.answer_space
 
@@ -231,10 +233,10 @@ class TorchBase(ABC):
                 except Exception as e:
                     logger.error(f"Failed to push to hub: {e}")
                 self.model.save_statistics(self.best_path)
-                self.model.reset_state()
+                self.model.reset_state(epoch, is_better=True)
             else:
                 logger.info(f"{val_loss=}")
-                self.model.reset_state()
+                self.model.reset_state(epoch, is_better=False)
 
                 # Saving the epoch which is supposed to be the next
                 self.save_trainer_state(
@@ -256,8 +258,6 @@ class TorchBase(ABC):
         # Load the best model
         model = self.load_from_checkpoint(is_trainable=True)
         processor = self.load_processor(use_checkpoint=True)
-        # self.push_to_hub(model, processor)
-        print()
 
         # Release resources
         del self.train_dataloader, self.val_dataloader

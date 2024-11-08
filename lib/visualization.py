@@ -24,6 +24,7 @@ import math
 import random
 import torch
 from lib.trainers.classification_trainer import ClassificationTrainer
+import textwrap
 
 
 def show_images_with_captions(
@@ -105,26 +106,6 @@ def show_umap_clustering(split, dataset, num_samples=100):
         filename=FileNames.UMAPClustering.format(split),
     )
 
-
-def visualize_features(split, dataset):
-    train_args = VQAParameters(split=split, use_filtered_split=True)
-    
-    parameters = TrainingParameters(
-        dataset_name=dataset,
-        resume_checkpoint=True,
-        resume_state=False,
-        model_name=ModelTypes.BLIP2Generator,
-        is_trainable=False,
-        train_args=train_args,
-        val_args=None,
-        test_args=None,
-        use_wandb=False,
-    )
-    
-    trainer = ClassificationTrainer(parameters)
-    trainer.train_one_epoch(1)
-
-
 def show_confusion_matrix(split, dataset):
     args = VQAParameters(split=split, use_filtered_split=True)
 
@@ -168,7 +149,8 @@ def calculate_cardinality_and_density(dataset):
     print(f"Average number of labels per sample: {avg_examples_per_sample:.2f}")
 
 
-def calculate_label_frequency(dataset, path, multilabel=False):
+def display_complete_bar_chart(dataset, path, multilabel=False, title=None):
+    """Expected to replace calculate_label_frequency"""
     # Flatten the list of labels
     df = dataset.raw_dataset.to_pandas()
     if multilabel:
@@ -183,48 +165,119 @@ def calculate_label_frequency(dataset, path, multilabel=False):
     label_distribution = pd.DataFrame.from_dict(
         label_counts, orient="index", columns=["Frequency"]
     ).sort_values(by="Frequency", ascending=False)
-    
-    print("Total number of items:\n", len(dataset.raw_dataset))
-
-    # Display the top 10 most frequent labels
-    print("Top 10 most frequent labels:\n", label_distribution.head(10))
-
-    # Display the top 10 least frequent labels
-    print("Top 10 least frequent labels:\n", label_distribution.tail(10))
 
     # Create an interactive figure with two subplots
     fig = make_subplots(
-        rows=2,
+        rows=1,
         cols=1,
-        subplot_titles=("Top 10 Most Frequent Labels", "Top 10 Least Frequent Labels"),
     )
 
     # Plot top 10 most frequent labels
     fig.add_trace(
         go.Bar(
-            x=label_distribution.head(10).index,
-            y=label_distribution.head(10)["Frequency"],
+            x=label_distribution.index,
+            y=label_distribution["Frequency"],
             name="Most Frequent",
         ),
         row=1,
         col=1,
     )
 
-    # Plot bottom 10 least frequent labels
-    fig.add_trace(
-        go.Bar(
-            x=label_distribution.tail(10).index,
-            y=label_distribution.tail(10)["Frequency"],
-            name="Least Frequent",
-        ),
-        row=2,
-        col=1,
-    )
+    # Update layout
+    fig.update_layout(height=800, width=800, title_text=title, title_x=0.5)
+    fig.write_image(f"{path}_complete_label_frequency_chart.pdf")
+
+def calculate_label_frequency(train_dataset, valid_dataset, test_dataset, path, multilabel=False, title=None):
+    def process_dataset(dataset):
+        if hasattr(dataset, 'raw_dataset'):
+            dataset = dataset.raw_dataset
+        df = dataset.to_pandas()
+        if multilabel:
+            all_labels = [label for sublist in df["answer"] for label in sublist]
+        else:
+            all_labels = [label for label in df["answer"]]
+        label_counts = Counter(all_labels)
+        return pd.DataFrame.from_dict(
+            label_counts, orient="index", columns=["Frequency"]
+        ).sort_values(by="Frequency", ascending=False)
+
+    # Process datasets
+    train_distribution = process_dataset(train_dataset)
+
+    datasets = [(train_distribution, "Training", "royalblue")]
+    
+    if valid_dataset is not None:
+        valid_distribution = process_dataset(valid_dataset)
+        datasets.append((valid_distribution, "Validation", "darkorange"))
+
+    
+    if test_dataset is not None:
+        test_distribution = process_dataset(test_dataset)
+        datasets.append((test_distribution, "Test", "limegreen"))
+
+
+    # Create the figure
+    fig = go.Figure()
+
+    # Add traces for each dataset
+    for distribution, name, color in datasets:
+        fig.add_trace(
+            go.Bar(
+                x=distribution.index,
+                y=distribution["Frequency"],
+                name=name,
+                marker_color=color,
+                opacity=1,
+            )
+        )
 
     # Update layout
-    fig.update_layout(height=800, width=800, title_text="Label Frequency Distribution")
-    fig.write_html(f"{path}_label_frequency.html")
+    fig.update_layout(
+        barmode='group',
+        height=600,
+        width=1000,
+        title={
+            'text': title,
+            'y':0.95,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        xaxis_title="Labels",
+        yaxis_title="Frequency",
+        legend_title="Dataset",
+        font=dict(size=12),
+        xaxis={'categoryorder':'total descending'},
+        showlegend=True
+    )
 
+    # Save the figure
+    fig.write_html(f"{path}_label_frequency.html")
+    fig.write_image(f"{path}_label_frequency.pdf")
+    fig.write_image(f"{path}_label_frequency.png")
+    
+    fig.show()
+
+
+def visualize_scatter_plot(dataset, path, multilabel=False, title=None):
+    # Flatten the list of labels
+    if hasattr(dataset, 'raw_dataset'):
+        dataset = dataset.raw_dataset
+    else:
+        dataset = dataset
+    df = dataset.to_pandas()
+    
+    if multilabel:
+        all_labels = [label for sublist in df["answer"] for label in sublist]
+    else:
+        all_labels = [label for label in df["answer"]]
+    label_counts = Counter(all_labels)
+    
+    # Convert to DataFrame for easier analysis
+    label_distribution = pd.DataFrame.from_dict(
+        label_counts, orient="index", columns=["Frequency"]
+    ).sort_values(by="Frequency", ascending=False)
+    
     # Visualize the scatter plot
     scatter_distribution = label_distribution.reset_index()
     scatter_distribution.columns = ["Label", "Frequency"]
@@ -252,13 +305,19 @@ def calculate_label_frequency(dataset, path, multilabel=False):
         yaxis_title="Frequency",
         yaxis_type="log",
     )
+    fig.write_image(f"{path}_label_frequency.svg")
     fig.write_html(f"{path}_scatter_plot.html")
+    fig.write_image(f"{path}_scatter_plot.pdf")
 
 
 
-def create_label_frequency_boxplot(dataset, path, multilabel=False):
+def create_label_frequency_boxplot(dataset, path, multilabel=False, title=None):
     # Flatten the list of labels
-    df = dataset.raw_dataset.to_pandas()
+    if hasattr(dataset, 'raw_dataset'):
+        dataset = dataset.raw_dataset
+    else:
+        dataset = dataset
+    df = dataset.to_pandas()
     if multilabel:
         all_labels = [label for labels in df["answer"] for label in labels]
     else:
@@ -304,7 +363,7 @@ def create_label_frequency_boxplot(dataset, path, multilabel=False):
     fig.add_trace(go.Box(
         x0=0,  # Set x0 to 0 for the box plot
         y=label_distribution["Frequency"],
-        name="Label Frequencies",
+        name="Inliers",
         boxpoints="all",
         jitter=0.3,
         pointpos=-1.8,
@@ -339,9 +398,10 @@ def create_label_frequency_boxplot(dataset, path, multilabel=False):
 
     # Update layout
     fig.update_layout(
-        title="Label Frequency Distribution Boxplot",
+        title=title,
+        title_x=0.5,
         yaxis_title="Frequency",
-        showlegend=False,
+        showlegend=True,  # Ensure legend is shown
         height=600,
         width=800,
         xaxis=dict(
@@ -354,19 +414,21 @@ def create_label_frequency_boxplot(dataset, path, multilabel=False):
     # Use log scale for y-axis to better visualize the distribution
     fig.update_yaxes(type="log")
 
-    # Save the figure as an interactive HTML file
+    # Save the figure as a PDF
     fig.write_html(f"{path}_boxplot.html")
+    fig.write_image(f"{path}_boxplot.pdf")
 
     # Print some statistics
     print(f"Number of unique labels: {len(all_labels)}")
     print(f"Mean frequency: {all_labels['Frequency'].mean():.2f}")
     print(f"Median frequency: {all_labels['Frequency'].median():.2f}")
     print(f"Number of outliers: {len(outliers)}")
-    print(f"Total number of items: {len(dataset.raw_dataset)}")
+    print(f"Total number of items: {len(dataset)}")
     
+    fig.show()
 
 
-def display_sample_images(dataset, dataset_name, num_images=20):
+def display_sample_images(dataset, name, path, num_images=20, font_size=8):
     # Get random indices
     indices = random.sample(range(len(dataset)), num_images)
     
@@ -376,7 +438,6 @@ def display_sample_images(dataset, dataset_name, num_images=20):
     
     # Set up the plot
     fig, axes = plt.subplots(rows, cols, figsize=(4*cols, 4*rows))
-    fig.suptitle(f"Sample Images from {dataset_name} Dataset", fontsize=16)
     
     # Flatten axes if it's a 2D array
     axes = axes.flatten() if num_images > cols else [axes]
@@ -393,63 +454,76 @@ def display_sample_images(dataset, dataset_name, num_images=20):
             ax.axis('off')
             
             # Add question and answer as title
-            question = example['question']
+            question = textwrap.fill(example['question'], width=20)
             answer = example['answer']
-            ax.set_title(f"Q: {question}\nA: {answer}", fontsize=8, wrap=True)
+            ax.set_title(f"Q: {question}\nA: {answer}", fontsize=font_size, wrap=True)
         else:
             # Remove unused subplots
             fig.delaxes(ax)
     
     plt.tight_layout()
+    plt.subplots_adjust(hspace=0.4)  # Add padding between rows
     
     # Save the figure as a PDF
-    pdf_filename = f"{dataset_name}_sample_images.pdf"
-    plt.savefig(pdf_filename, format='pdf', dpi=300, bbox_inches='tight')
+    plt.savefig(path, format='pdf', dpi=300, bbox_inches='tight')
+    plt.show()
     plt.close()  # Close the figure to free up memory
     
-    print(f"Sample images saved as {pdf_filename}")
+    print(f"Sample images saved as {path}")
 
+def display_class_specific_images(dataset, name, path, class_types, images_per_class=5, font_size=10):
+    # Set up the plot
+    rows = len(class_types)
+    cols = images_per_class
+    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 5.5*rows))  # Increased height for padding
+    
+    for row, class_type in enumerate(class_types):
+        # Find all indices for the current class
+        class_indices = [i for i, example in enumerate(dataset) if example['answer'] == class_type]
+        
+        # If there are fewer than 5 images for this class, use all available
+        num_images = min(images_per_class, len(class_indices))
+        selected_indices = random.sample(class_indices, num_images)
+        
+        for col, idx in enumerate(selected_indices):
+            ax = axes[row, col] if rows > 1 else axes[col]
+            example = dataset[idx]
+            
+            # Display the image
+            ax.imshow(example['image'])
+            ax.axis('off')
+            
+            # Add question and answer as title
+            question = example['question']
+            answer = example['answer']
+            
+            # Wrap the question text
+            wrapped_question = textwrap.fill(question, width=20)
+            
+            ax.set_title(f"Q: {wrapped_question}\nA: {answer}", fontsize=font_size*0.7, wrap=True)
+        
+        # Remove unused subplots if fewer than 5 images
+        for col in range(num_images, images_per_class):
+            ax = axes[row, col] if rows > 1 else axes[col]
+            fig.delaxes(ax)
+        
 
-def show_class_prediction_heatmap(encodings, labels, unique_labels_array, answer_to_id, split, dataset_name):
-    # Convert list of tensors to a single numpy array
-    encodings_np = np.concatenate([tensor.cpu().detach().numpy() for tensor in encodings], axis=0)
-    
-    # Apply softmax to convert logits to probabilities
-    probabilities = np.exp(encodings_np) / np.sum(np.exp(encodings_np), axis=1, keepdims=True)
-    
-    # Convert one-hot encoded labels to class indices
-    flattened_labels = np.argmax(np.concatenate([batch_labels.cpu().numpy() for batch_labels in labels], axis=0), axis=1)
-    
-    # Calculate average probabilities for each true class
-    avg_probabilities = np.zeros((len(unique_labels_array), encodings_np.shape[1]))
-    for i, label in enumerate(unique_labels_array):
-        label_mask = flattened_labels == answer_to_id[label]
-        if np.any(label_mask):
-            avg_probabilities[i] = np.mean(probabilities[label_mask], axis=0)
-    
-    # Create the heatmap
-    plt.figure(figsize=(20, 16))
-    ax = sns.heatmap(avg_probabilities, annot=True, fmt='.2f', cmap='RdYlBu_r',
-                     xticklabels=unique_labels_array, yticklabels=unique_labels_array,
-                     cbar_kws={'label': 'Fraction of misclassifications'})
-    
-    # Rotate x-axis labels
-    plt.xticks(rotation=90, ha='center')
-    plt.yticks(rotation=0)
-    
-    # Adjust label sizes
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
-    ax.set_yticklabels(ax.get_yticklabels(), fontsize=8)
-    
-    # Set labels and title
-    split = "Validation" if split == "val" else "Training"
-    plt.title(f'{split} Average Class Predictions', fontsize=16, pad=20)
-    plt.xlabel('True Class', fontsize=14, labelpad=10)
-    plt.ylabel('Predicted Class', fontsize=14, labelpad=10)
-    
-    # Adjust layout
+    # Adjust layout to add padding between rows
     plt.tight_layout()
+    plt.subplots_adjust(hspace=0.3)  # Increase vertical space between subplots
     
-    # Save the figure
-    plt.savefig(f'{dataset_name}_{split}_class_prediction_heatmap.pdf', dpi=300, bbox_inches='tight')
+    # Save the figure as a PDF
+    plt.savefig(path, format='pdf', dpi=300, bbox_inches='tight')
+    plt.show()
+    plt.close()  # Close the figure to free up memory
+    
+    print(f"Class-specific sample images saved as {path}")
+
+
+
+def show_image(sample, predicted, target):
+    plt.title(f'{sample["question"]}\nPredicted: {predicted}\nTarget: {target}')
+    plt.imshow(sample["image"])
+    plt.axis('off')
+    plt.show()
     plt.close()

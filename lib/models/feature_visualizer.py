@@ -12,6 +12,7 @@ from scipy.stats import gaussian_kde
 from sklearn.preprocessing import StandardScaler
 from umap import UMAP
 import colorsys
+from lib.types import SAVE_PATHS
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ class FeatureVisualizer:
             random_state=42,
         )
         self.dataset_name = dataset_name
-
+        self.best_path = SAVE_PATHS.BLIP2_Classifier_DAQUAR if dataset_name == "daquar" else SAVE_PATHS.BLIP2_Classifier_EasyVQA
+        
     def accumulate_features(self, features, labels, split):
         if split == "train":
             self.accumulated_features_train.append(features)
@@ -67,14 +69,17 @@ class FeatureVisualizer:
             self.accumulated_labels_valid = labels
         self.split = split
     
-    def reset(self):
+    def reset(self, epoch, is_better):
+        print(f"Saving feature map to {self.best_path}/images/{is_better}_{self.dataset_name}_{epoch}_features")
+        self.split = "val"
+        self.visualize_features_with_umap(f"{self.best_path}/images/{is_better}_{self.dataset_name}_{epoch}_features", show=False)
         self.accumulated_features_train = []
         self.accumulated_labels_train = []
         self.accumulated_features_valid = []
         self.accumulated_labels_valid = []
 
     def visualize_features_with_umap(
-        self, interactive=True, save_format="html", sample_size=5000, aggregate=False
+        self, save_path, interactive=True, save_format="html", sample_size=5000, aggregate=False, show=True
     ):
         """
         Visualize the features that are aggregated by the classifier.
@@ -101,10 +106,10 @@ class FeatureVisualizer:
 
         if interactive:
             self._create_interactive_plot(
-                umap_embedding, colors, class_names, save_format
+                umap_embedding, colors, class_names, save_format, save_path, show
             )
         else:
-            self._create_static_plot(umap_embedding, colors, label_indices)
+            self._create_static_plot(umap_embedding, colors, label_indices, save_path)
 
     def _prepare_data(self):
         if self.split == "train":
@@ -166,7 +171,7 @@ class FeatureVisualizer:
         RGB_tuples = map(lambda x: colorsys.hsv_to_rgb(*x), HSV_tuples)
         return ['rgb({},{},{})'.format(int(r * 255), int(g * 255), int(b * 255)) for r, g, b in RGB_tuples]
 
-    def _create_interactive_plot(self, umap_embedding, colors, class_names, save_format):
+    def _create_interactive_plot(self, umap_embedding, colors, class_names, save_format, save_path, show=True):
         unique_classes = np.unique(class_names)
         traces = []
 
@@ -192,33 +197,55 @@ class FeatureVisualizer:
         fig = go.Figure(data=traces)
 
         fig.update_layout(
-            title="UMAP projection of features",
-            xaxis_title="UMAP1",
-            yaxis_title="UMAP2",
-            legend_title="Classes",
-            width=1000,
-            height=800,
-            hovermode="closest",
+            title=dict(
+                text=f"UMAP feature projections ({self.split})",
+                font=dict(size=24)  # Increased title font size
+            ),
+            xaxis_title=dict(
+                text="UMAP1",
+                font=dict(size=18)  # Increased axis title font size
+            ),
+            yaxis_title=dict(
+                text="UMAP2",
+                font=dict(size=18)
+            ),
+            legend_title=dict(
+                text="Classes",
+                font=dict(size=18)
+            ),
             legend=dict(
                 yanchor="top",
                 y=0.99,
                 xanchor="left",
-                x=1.05
-            )
+                x=1.05,
+                font=dict(size=14)  # Increased legend font size
+            ),
+            width=1000,
+            height=800,
+            hovermode="closest"
         )
 
-        fig.update_xaxes(showgrid=False)
-        fig.update_yaxes(showgrid=False)
-
-        if save_format == "html":
-            pio.write_html(fig, file=f"umap_features_interactive_{self.dataset_name}_{self.split}.html")
-            pio.write_image(fig, file=f"umap_features_interactive_{self.dataset_name}_{self.split}.pdf", format="pdf")
-        elif save_format == "json":
-            pio.write_json(fig, file=f"umap_features_interactive_{self.dataset_name}_{self.split}.json")
+        # Increase axis label font sizes
+        fig.update_xaxes(showgrid=False, tickfont=dict(size=14))
+        fig.update_yaxes(showgrid=False, tickfont=dict(size=14))
+            
+        if show:
+            if save_format == "html":
+                pio.write_html(fig, file=f"{save_path}.html")
+                pio.write_image(fig, file=f"{save_path}.pdf", format="pdf")
+                pio.write_image(fig, file=f"{save_path}.svg", format="svg")
+                pio.write_image(fig, file=f"{save_path}.jpg", format="jpg")
+            elif save_format == "json":
+                pio.write_json(fig, file=f"{save_path}.json")
+                pio.write_image(fig, file=f"{save_path}.pdf", format="pdf")
+                pio.write_image(fig, file=f"{save_path}.svg", format="svg")
+            fig.show()
+        else:
+            pio.write_image(fig, file=f"{save_path}.jpg", format="jpg")
 
         return fig
 
-    def _create_static_plot(self, umap_embedding, colors, labels):
+    def _create_static_plot(self, umap_embedding, colors, labels, save_path):
         plt.figure(figsize=(10, 8))
         scatter = plt.scatter(
             umap_embedding[:, 0],
@@ -238,5 +265,5 @@ class FeatureVisualizer:
         cbar.set_ticklabels([self.id_to_answer[label] for label in unique_labels])
 
         plt.title("UMAP projection of aggregated features (Static)")
-        plt.savefig("umap_features_static.svg")
+        plt.savefig(f"{save_path}.svg")
         plt.close()

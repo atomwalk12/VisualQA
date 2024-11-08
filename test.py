@@ -3,7 +3,7 @@ import logging
 import warnings
 
 import sys
-sys.path.insert(0, "./docs/transformers/transformers/src")
+
 
 from lib.trainers.base_trainer import TorchBase
 from lib.trainers.classification_trainer import ClassificationTrainer
@@ -53,6 +53,7 @@ def evaluate_model(args):
         val_args=None,
         test_args=test_args,
         resume_state=False,
+        is_testing=True,
     )
 
     if args.model == ModelTypes.BLIP2Generator or args.model == ModelTypes.BLIP2FinetunedGenerator:

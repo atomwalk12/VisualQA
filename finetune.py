@@ -4,7 +4,6 @@ import logging
 import warnings
 
 import sys
-sys.path.insert(0, "./docs/transformers/transformers/src")
 
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer

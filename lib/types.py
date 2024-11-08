@@ -240,14 +240,15 @@ class TrainingParameters:
     dataset_name: str
     wandb_project: str = "ComputerVision"
     shuffle_train: bool = True
-    num_train_workers: int = 12
-    num_val_workers: int = 8
-    num_test_workers: int = 8
+    num_train_workers: int = 1
+    num_val_workers: int = 1
+    num_test_workers: int = 1
     use_wandb: bool = True
     split: str = None
     resume_state: bool = True
     lora_config = None
     bnb_config = None
+    is_testing: bool = False
 
     @property
     def _resume_state(self) -> int:

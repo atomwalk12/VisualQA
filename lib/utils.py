@@ -402,11 +402,15 @@ def without_seed():
         random.setstate(state)
 
 def write_wandb_id(file):
-    with without_seed():
-        id = random.randint(0, np.iinfo(np.int32).max)
+    id = get_id()
     
     with open(file, 'a') as file:
         # Read the content of the file
         file.write(str(f"{id} "))
         file.close()
+    return id
+
+def get_id():
+    with without_seed():
+        id = random.randint(0, np.iinfo(np.int32).max)
     return id

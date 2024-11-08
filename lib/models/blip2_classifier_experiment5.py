@@ -123,6 +123,7 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
         attention_mask: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         extract_features: str = "train",
+        log: bool = True,
     ):
         vision_outputs = self.model.vision_model(
             pixel_values=pixel_values,
@@ -178,8 +179,9 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
             classifier_loss = self.criterion(logits, labels)
             total_loss = classifier_loss
 
-            wandb.log(
-                {
+            if log:
+                wandb.log(
+                    {
                     "Classifier Loss": classifier_loss.item(),
                 }
             )

@@ -26,20 +26,24 @@ logger = logging.getLogger(__name__)
 class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
-        self.multi_class = config.train_args.multi_class_classifier
+        self.multi_class = True # assume multi-class classification
+        if config.train_args:
+            self.multi_class = config.train_args.multi_class_classifier
+            
+
         self.train_accumulator = ClassificationMetricsAccumulator(
             self.dataset_name,
             self.answer_space,
             Suffix.Train,
             update_frequency=1,
-            log_confusion_matrix=self.multi_class,
+            plot_confusion_matrix=self.multi_class,
         )
         self.val_accumulator = ClassificationMetricsAccumulator(
             self.dataset_name,
             self.answer_space,
             Suffix.Val,
             update_frequency=1,
-            log_confusion_matrix=self.multi_class,
+            plot_confusion_matrix=self.multi_class,
         )
         self.state_update_frequency = 1
 
@@ -135,6 +139,8 @@ class ClassificationTrainer(TorchBase):
                     attention_mask=attention_mask,
                     labels=labels,
                 )
+                
+                self.on_batch_processed(outputs, labels)
 
                 _, preds = torch.max(outputs.logits, 1)
                 _, target_pred = torch.max(labels, 1)
@@ -154,19 +160,6 @@ class ClassificationTrainer(TorchBase):
 
                 bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
 
-                # Save the state
-                if step % self.state_update_frequency == 0:
-                    self.save_trainer_state(
-                        best_epoch_loss,
-                        history,
-                        step + 1,
-                        self.test_dataloader,
-                    )
-
-        # Save the entire results
-        self.save_trainer_state(
-            best_epoch_loss, history, step + 1, self.test_dataloader
-        )
 
         # Release resources
         gc.collect()

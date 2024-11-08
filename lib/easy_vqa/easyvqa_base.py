@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 class EasyVQADatasetBase(DatabaseBase):
     raw_dataset: Dataset = None
     _dataset: Dataset = None
+    train_dataset: Dataset = None
+    val_dataset: Dataset = None
 
     def __init__(self, params: VQAParameters):
         super().__init__(DatasetTypes.EASY_VQA, params)
@@ -60,7 +62,8 @@ class EasyVQADatasetBase(DatabaseBase):
 
         if start is not None or end is not None:
             assert split in [choice for choice in Suffix]
-            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
+            ds = raw_dataset.map(
+                lambda example: {"stratify_column": example["answer"]})
             start = 0 if start is None else start
             end = len(ds) if end is None else end
 
@@ -78,7 +81,8 @@ class EasyVQADatasetBase(DatabaseBase):
 
             assert len(raw_dataset) == end - start
         elif self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
+            ds = raw_dataset.map(
+                lambda example: {"stratify_column": example["answer"]})
             ds = ds.class_encode_column("stratify_column").train_test_split(
                 test_size=0.2,
                 stratify_by_column="stratify_column",
@@ -125,6 +129,15 @@ class EasyVQADatasetBase(DatabaseBase):
 
     def initialize_proportional_raw(self):
         """Method to initialize the dataset with a proportional and balanced split."""
+
+        if EasyVQADatasetBase.train_dataset is not None and self.split.startswith(
+            Suffix.Train
+        ):
+            return EasyVQADatasetBase.train_dataset
+
+        if EasyVQADatasetBase.val_dataset is not None and self.split.startswith(Suffix.Val):
+            return EasyVQADatasetBase.val_dataset
+
         raw_dataset = self.initialize_raw()
 
         def stratified_split(examples):
@@ -155,17 +168,17 @@ class EasyVQADatasetBase(DatabaseBase):
             return train_indices, val_indices
 
         # Apply the custom splitting function
-        train_indices, val_indices = stratified_split(raw_dataset)
+        train_indices, test_indices = stratified_split(raw_dataset)
 
         indices = (
             train_indices
-            if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Test)
-            else val_indices
+            if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val)
+            else test_indices
         )
         raw_dataset = raw_dataset.select(indices)
 
         # New code to further split the training dataset into train/test
-        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Test):
+        if self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
             raw_dataset = raw_dataset.map(
                 lambda example: {"stratify_column": example["answer"][0]}, batched=False
             )
@@ -180,8 +193,10 @@ class EasyVQADatasetBase(DatabaseBase):
                 )
                 .values()
             )
-            result = train_dataset if self.split == Suffix.Train else test_dataset
-            
+            EasyVQADatasetBase.train_dataset = train_dataset
+            EasyVQADatasetBase.val_dataset = test_dataset
+            result = EasyVQADatasetBase.train_dataset if self.split == Suffix.Train else EasyVQADatasetBase.val_dataset
+
             logger.info(f"Read {self.split} dataset, length: {len(result)}")
             return result
 

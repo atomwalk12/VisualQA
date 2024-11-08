@@ -18,8 +18,7 @@
                 "--train-split",
                 "train",
                 "--val-split",
-                "val",
-                //"--resume-training"
+                "val"
             ]
         },
         {
@@ -38,23 +37,6 @@
             ]
         },
         {
-            "name": "Visualization Easy-VQA dataset Confusion Matrix",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "visualization.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2-classifier",
-                "--dataset",
-                "easy-vqa",
-                "--metric",
-                "confusion-matrix",
-                "--split",
-                "train[:1000]",
-            ]
-        },
-        {
             "name": "Fine-tune blip2 on easy-vqa dataset",
             "type": "debugpy",
             "request": "launch",
@@ -68,8 +50,7 @@
                 "--train-split",
                 "train",
                 "--val-split",
-                "val",
-                // "--resume-training"
+                "val"
             ]
         },
         {
@@ -84,32 +65,8 @@
                 "--dataset",
                 "easy-vqa",
                 "--test-split",
-                "test[:30]"
+                "test"
             ]
-        },
-        {
-            "name": "Visualization Easy-VQA dataset UMAP",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "visualization.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2-classifier",
-                "--dataset",
-                "easy-vqa",
-                "--metric",
-                "umap",
-                "--split",
-                "test[:30]",
-            ]
-        },
-        {
-            "name": "Python Debugger: Current File",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal"
         },
         {
             "name": "Fine-tune classifier on daquar dataset",
@@ -125,8 +82,7 @@
                 "--train-split",
                 "train",
                 "--val-split",
-                "val",
-                //"--resume-training"
+                "val"
             ]
         },
         {
@@ -137,32 +93,13 @@
             "console": "integratedTerminal",
             "args": [
                 "--model",
-                "blip2-finetuned-classifier",
+                "blip2-classifier",
                 "--dataset",
                 "daquar",
                 "--test-split",
-                "test",
+                "val",
             ]
         },
-
-        {
-            "name": "Visualization DAQUAR dataset Confusion Matrix",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "visualization.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2-finetuned-classifier",
-                "--dataset",
-                "daquar",
-                "--metric",
-                "confusion-matrix",
-                "--split",
-                "train[:80]",
-            ]
-        },
-
         {
             "name": "Fine-tune blip2-generator on daquar dataset",
             "type": "debugpy",
@@ -177,8 +114,7 @@
                 "--train-split",
                 "train",
                 "--val-split",
-                "val",
-                // "--resume-training"
+                "val"
             ]
         },
         {
@@ -193,104 +129,8 @@
                 "--dataset",
                 "daquar",
                 "--test-split",
-                "test[:1000]"
+                "val"
             ]
-        },
-        {
-            "name": "Test, Visualization DAQUAR dataset UMAP",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "visualization.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model",
-                "blip2-finetuned-classifier",
-                "--dataset",
-                "daquar",
-                "--metric",
-                "umap",
-                "--split",
-                "train",
-            ]
-        },
-        // {
-        //     "name": "Fine tune base classifier on easy-vqa dataset",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "finetune.py",
-        //     "console": "integratedTerminal",
-        //     "args": [
-        //         "--model",
-        //         "blip2-base-classifier",
-        //         "--dataset",
-        //         "easy-vqa",
-        //         "--train-split",
-        //         "train[:85]",
-        //         "--val-split",
-        //         "train[:80]",
-        //         "--resume-training"
-        //     ]
-        // },
-
-
-        // {
-        //     "name": "Test, blip2-base-classifier on classification base easy-vqa dataset",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "test.py",
-        //     "console": "integratedTerminal",
-        //     "args": [
-        //         "--model",
-        //         "blip2-base-classifier",
-        //         "--dataset",
-        //         "easy-vqa",
-        //         "--test-split",
-        //         "test[:30]",
-        //     ]
-        // },
-        // {
-        //     "name": "Fine tune base classifier on daquar dataset",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "finetune.py",
-        //     "console": "integratedTerminal",
-        //     "args": [
-        //         "--model",
-        //         "blip2-base-classifier",
-        //         "--dataset",
-        //         "daquar",
-        //         "--train-split",
-        //         "train[:85]",
-        //         "--val-split",
-        //         "train[:80]",
-        //         "--resume-training"
-        //     ]
-        // },
-
-        // {
-        //     "name": "Test, blip2-base-classifier on classification base daquar dataset",
-        //     "type": "debugpy",
-        //     "request": "launch",
-        //     "program": "test.py",
-        //     "console": "integratedTerminal",
-        //     "args": [
-        //         "--model",
-        //         "blip2-base-classifier",
-        //         "--dataset",
-        //         "daquar",
-        //         "--test-split",
-        //         "test[:30]",
-        //     ]
-        // },
-
-
-
-        {
-            "name": "Show a few sample images",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "inference.py",
-            "console": "integratedTerminal",
-        },
+        }
     ]
 }
