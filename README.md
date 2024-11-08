@@ -54,6 +54,26 @@ If the folders specified below don't exist, create them.
 
 Check the [EasyVQA](https://huggingface.co/atomwalk12/blip2-easyvqa-classifier)  and [DAQUAR](https://huggingface.co/atomwalk12/blip2-daquar-classifier) fine-tuned models at the Huggingface repositories. 
 
+### Training parameters
+
+If you decide to reuse these models, here are the LoRa and bnb configurations that were used for training:
+
+```python
+BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float32,
+)
+
+LoraConfig(
+    r=8,
+    lora_alpha=8,
+    lora_dropout=0.1,
+    target_modules="all-linear",
+    init_lora_weights="gaussian",
+)
+```
+
 ## Training/Evaluation scripts
 
 ### Training from scratch
