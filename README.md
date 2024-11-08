@@ -25,7 +25,7 @@ Prior to running the following files, please set up the environment first. The f
 
 Required dependencies:
 
-- Anaconda (Check [here](https://docs.anaconda.com/anaconda/install/) for installation instructions)
+- Anaconda (check [here](https://docs.anaconda.com/anaconda/install/) for installation instructions)
 - Python 3.12
 
 ```shell
