@@ -1,4 +1,4 @@
-# BLIP-2: Using generative models on classification tasks
+# BLIP-2: Generative models on classification tasks
 
 This repository demonstrates a technique for training the BLIP-2 generative model for classification tasks.
 
