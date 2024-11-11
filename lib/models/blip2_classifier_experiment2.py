@@ -10,9 +10,10 @@ from .base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 
 logger = logging.getLogger(__name__)
 
+
 class Blip2ClassifierExperiment2(Blip2BaseClassifier):
     """
-    This is the second classifier I used. It is still a MLP classifier, however the 
+    This is the second classifier I used. It is still a MLP classifier, however the
     output is projected using two intermediate linear layers to make the input homogenous.
     This contrasts with the Experiment 1 which uses a mean average to make the features
     compatible.
@@ -29,8 +30,10 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
 
         self.qformer_proj = nn.Linear(config.qformer_config.hidden_size, 256)
         self.vit_proj = nn.Linear(config.vision_config.hidden_size, 256)
-        
-        self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
+
+        self.query_tokens = nn.Parameter(
+            torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size)
+        )
 
         self.classifier = nn.Sequential(
             nn.Linear(512 + 1024, config.interm_dim),  # 32 x 768
@@ -39,7 +42,6 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
             nn.Dropout(0.5),
             nn.Linear(config.interm_dim, self.answer_space_dim),
         )
-        
 
     def forward(
         self,
@@ -55,28 +57,30 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
             labels=input_ids,
             attention_mask=attention_mask,
         )
-        
+
         # Process QFormer features
         qformer_features = outputs.qformer_outputs.last_hidden_state
         text_embeds = self.text_projection(qformer_features)
         text_embeds = nn.functional.normalize(text_embeds, dim=-1)
-        
+
         # Process Vision features
         pooled_output = outputs.vision_outputs.last_hidden_state
-        image_attention_mask = torch.ones(pooled_output.size()[:-1], dtype=torch.long, device=pooled_output.device)
-        
+        image_attention_mask = torch.ones(
+            pooled_output.size()[:-1], dtype=torch.long, device=pooled_output.device
+        )
+
         query_tokens = self.query_tokens.expand(pooled_output.shape[0], -1, -1)
-        
+
         query_outputs = self.model.qformer(
             query_embeds=query_tokens,
             encoder_hidden_states=pooled_output,
-            encoder_attention_mask=image_attention_mask
+            encoder_attention_mask=image_attention_mask,
         )
 
         embeds = query_outputs.last_hidden_state
         image_embeds = self.vision_projection(embeds)
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
-        
+
         # Normalize features
         combined_features = torch.cat((text_embeds, image_embeds), dim=1)
 
@@ -97,5 +101,3 @@ class Blip2ClassifierExperiment2(Blip2BaseClassifier):
         outputs.logits = logits
 
         return outputs
-
-

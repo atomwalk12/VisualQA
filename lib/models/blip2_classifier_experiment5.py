@@ -113,7 +113,9 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
         self.temperature = nn.Parameter(torch.ones([]) * 0.07)
         self.text_embeddings = Blip2TextEmbeddings(config.qformer_config)
 
-        self.id_to_answer = {i: answer for i, answer in enumerate(self.config.answer_space)}
+        self.id_to_answer = {
+            i: answer for i, answer in enumerate(self.config.answer_space)
+        }
         self.post_init()
 
     def forward(
@@ -174,7 +176,7 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
             self.feature_visualizer.accumulate_features(logits, labels, "train")
         elif extract_features == "val":
             self.feature_visualizer.accumulate_features(logits, labels, "val")
-            
+
         if labels is not None:
             classifier_loss = self.criterion(logits, labels)
             total_loss = classifier_loss
@@ -182,9 +184,9 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
             if log:
                 wandb.log(
                     {
-                    "Classifier Loss": classifier_loss.item(),
-                }
-            )
+                        "Classifier Loss": classifier_loss.item(),
+                    }
+                )
         else:
             total_loss = None
 

@@ -238,48 +238,51 @@ class DaquarDatasetBase(DatabaseBase):
         final_dataset = filtered_dataset.map(update_answers)
 
         # Calculate label distribution
-        all_labels = [label for example in final_dataset['answer'] for label in example]
+        all_labels = [label for example in final_dataset["answer"] for label in example]
         label_counts = Counter(all_labels)
         total_labels = sum(label_counts.values())
-        label_distribution = {label: count / total_labels for label, count in label_counts.items()}
+        label_distribution = {
+            label: count / total_labels for label, count in label_counts.items()
+        }
 
         # Identify labels in the lowest 30% of distribution
         threshold = np.percentile(list(label_distribution.values()), self.percentile)
-        low_distribution_labels = set(label for label, dist in label_distribution.items() if dist <= threshold)
+        low_distribution_labels = set(
+            label for label, dist in label_distribution.items() if dist <= threshold
+        )
 
         def augment_image(image):
             augmentations = [
                 transforms.RandomRotation(degrees=5),  # Reduced rotation
-                transforms.RandomResizedCrop(size=image.size, scale=(0.9, 1.0), ratio=(0.95, 1.05)),  # Minimal crop
-                transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0),  # Subtle color changes
+                transforms.RandomResizedCrop(
+                    size=image.size, scale=(0.9, 1.0), ratio=(0.95, 1.05)
+                ),  # Minimal crop
+                transforms.ColorJitter(
+                    brightness=0.1, contrast=0.1, saturation=0.1, hue=0
+                ),  # Subtle color changes
                 transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 0.5)),  # Subtle blur
             ]
             aug_transform = transforms.Compose(random.sample(augmentations, k=3))
             return aug_transform(image)
 
-        augmented_examples = {
-            'question': [],
-            'answer': [],
-            'image_id': [],
-            'image': []
-        }
+        augmented_examples = {"question": [], "answer": [], "image_id": [], "image": []}
 
         # Iterate through the original dataset
         for example in tqdm(final_dataset, desc="Augmenting dataset"):
             # Check if any of the example's labels are in the low distribution set
-            if any(label in low_distribution_labels for label in example['answer']):
+            if any(label in low_distribution_labels for label in example["answer"]):
                 # Generate two additional augmented images
                 for _ in range(2):
-                    augmented_examples['question'].append(example['question'])
-                    augmented_examples['answer'].append(example['answer'])
-                    augmented_examples['image_id'].append(example['image_id'])
-                    augmented_examples['image'].append(augment_image(example['image']))
+                    augmented_examples["question"].append(example["question"])
+                    augmented_examples["answer"].append(example["answer"])
+                    augmented_examples["image_id"].append(example["image_id"])
+                    augmented_examples["image"].append(augment_image(example["image"]))
             else:
                 # Generate one additional augmented image for other labels
-                augmented_examples['question'].append(example['question'])
-                augmented_examples['answer'].append(example['answer'])
-                augmented_examples['image_id'].append(example['image_id'])
-                augmented_examples['image'].append(augment_image(example['image']))
+                augmented_examples["question"].append(example["question"])
+                augmented_examples["answer"].append(example["answer"])
+                augmented_examples["image_id"].append(example["image_id"])
+                augmented_examples["image"].append(augment_image(example["image"]))
 
         # Create the augmented dataset
         self.augmented_dataset = Dataset.from_dict(augmented_examples)
@@ -376,11 +379,11 @@ class DaquarDatasetBase(DatabaseBase):
         # Split the dataset
         train_dataset = raw_dataset.select(train_indices)
         test_dataset = raw_dataset.select(test_indices)
-        
+
         # Shuffle the train dataset
         train_dataset = train_dataset.shuffle(seed=EXPERIMENT.get_seed())
         test_dataset = test_dataset.shuffle(seed=EXPERIMENT.get_seed())
-        
+
         result = train_dataset if split == Suffix.Train else test_dataset
 
         logger.info(f"Train dataset size: {len(train_dataset)}")

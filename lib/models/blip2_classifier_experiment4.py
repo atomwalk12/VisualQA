@@ -21,10 +21,11 @@ class Result:
 
 
 class Blip2ClassifierExperiment4(Blip2BaseClassifier):
-    """This is the fourth classifier I used. The main idea is that I did not use the 
-    Blip2ForConditionalGeneration model to get the features. Instead, I use the Blip2 
+    """This is the fourth classifier I used. The main idea is that I did not use the
+    Blip2ForConditionalGeneration model to get the features. Instead, I use the Blip2
     model's features, a model not conceived for VQA (it does not contain the LLM).
     """
+
     config_class = Blip2ClassifierConfig
 
     def __init__(self, config: Blip2ClassifierConfig, peft_model: PeftModel):
@@ -33,7 +34,7 @@ class Blip2ClassifierExperiment4(Blip2BaseClassifier):
 
         self.config = config
         self.model: PeftModel = peft_model
-        
+
         # 1408 + 2560
         # Fusion and final classification
         self.peft_config: Blip2Config = peft_model.peft_config
@@ -43,7 +44,7 @@ class Blip2ClassifierExperiment4(Blip2BaseClassifier):
             nn.Linear(config.classification_input_dim, config.interm_dim),  # 32 x 768
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(config.interm_dim, len(self.answer_space))
+            nn.Linear(config.interm_dim, len(self.answer_space)),
         )
 
         self.criterion = nn.CrossEntropyLoss()

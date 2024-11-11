@@ -2,9 +2,6 @@ import argparse
 import logging
 import warnings
 
-import sys
-
-
 from lib.trainers.base_trainer import TorchBase
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer

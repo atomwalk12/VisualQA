@@ -11,10 +11,9 @@ from torch.nn import Module
 from transformers import Blip2Config, PreTrainedModel
 
 import wandb
-from lib.types import DatasetTypes
 
 from .feature_visualizer import FeatureVisualizer
-import torch.nn.functional as F
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,7 +53,9 @@ class Blip2BaseClassifier(PreTrainedModel):
             idx: answer for idx, answer in enumerate(self.answer_space)
         }
 
-        self.feature_visualizer = FeatureVisualizer(self.id_to_answer, config.dataset_name)
+        self.feature_visualizer = FeatureVisualizer(
+            self.id_to_answer, config.dataset_name
+        )
         self.config = config
         self.model: PeftModel = peft_model
         self.peft_config: Blip2Config = peft_model.peft_config
@@ -76,9 +77,14 @@ class Blip2BaseClassifier(PreTrainedModel):
     def save_statistics(self, output_path):
         features_path_train = os.path.join(output_path, "features_train.pkl")
         features_path_valid = os.path.join(output_path, "features_val.pkl")
-        pickle.dump(self.feature_visualizer.get_features("train"), open(features_path_train, "wb"))
-        pickle.dump(self.feature_visualizer.get_features("val"), open(features_path_valid, "wb"))
-    
+        pickle.dump(
+            self.feature_visualizer.get_features("train"),
+            open(features_path_train, "wb"),
+        )
+        pickle.dump(
+            self.feature_visualizer.get_features("val"), open(features_path_valid, "wb")
+        )
+
     def reset_state(self, epoch, is_better):
         self.feature_visualizer.reset(epoch, is_better)
 
@@ -143,21 +149,21 @@ class Blip2BaseClassifier(PreTrainedModel):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=1, gamma=2, reduction='mean'):
+    def __init__(self, alpha=1, gamma=2, reduction="mean"):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
-        self.bce_with_logits = nn.BCEWithLogitsLoss(reduction='none')
+        self.bce_with_logits = nn.BCEWithLogitsLoss(reduction="none")
 
     def forward(self, inputs, targets):
         BCE_loss = self.bce_with_logits(inputs, targets)
         pt = torch.exp(-BCE_loss)  # prevents nans when probability 0
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        F_loss = self.alpha * (1 - pt) ** self.gamma * BCE_loss
 
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             return torch.mean(F_loss)
-        elif self.reduction == 'sum':
+        elif self.reduction == "sum":
             return torch.sum(F_loss)
         else:
             return F_loss

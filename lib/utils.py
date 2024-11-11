@@ -7,12 +7,16 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
-from sklearn.metrics import accuracy_score, classification_report, hamming_loss, jaccard_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    hamming_loss,
+    jaccard_score,
+)
 from sentence_transformers import util
 import wandb
 from lib.experiments import Reproducible
 
-from .types import DatasetTypes, Suffix
 import numpy as np
 
 EXPERIMENT: Reproducible = Reproducible()
@@ -57,8 +61,14 @@ def format_time(seconds):
 
 
 class ClassificationMetricsAccumulator:
-
-    def __init__(self, dataset_name, answer_space, name, update_frequency, plot_confusion_matrix=True):
+    def __init__(
+        self,
+        dataset_name,
+        answer_space,
+        name,
+        update_frequency,
+        plot_confusion_matrix=True,
+    ):
         self.dataset_name = dataset_name
         self.accumulated_targets = []
         self.accumulated_predictions = []
@@ -85,7 +95,7 @@ class ClassificationMetricsAccumulator:
 
         if self.iteration % self.update_frequency == 0:
             self.report_multi_class_statistics()
-            
+
     def report_multi_class_statistics(self):
         predictions = self.accumulated_predictions
         targets = self.accumulated_targets
@@ -101,10 +111,22 @@ class ClassificationMetricsAccumulator:
 
     def generate_report(self, targets, predictions, multi_label):
         if multi_label:
-            report = classification_report(targets, predictions, target_names=self.answer_space, output_dict=True, zero_division=0.0)
+            report = classification_report(
+                targets,
+                predictions,
+                target_names=self.answer_space,
+                output_dict=True,
+                zero_division=0.0,
+            )
         else:
             # Classification report
-            report = classification_report(targets, predictions, labels=np.unique(predictions), output_dict=True, zero_division=0.0)
+            report = classification_report(
+                targets,
+                predictions,
+                labels=np.unique(predictions),
+                output_dict=True,
+                zero_division=0.0,
+            )
 
         # Extract relevant metrics from the classification report
         precision_macro = report["macro avg"]["precision"]
@@ -154,17 +176,17 @@ class ClassificationMetricsAccumulator:
         predictions_adaptive = (probs > threshold).int()
 
         # Method 2: Top-3 Selection
-        k = 3 
+        k = 3
         _, top_3_indices = torch.topk(probs, k, dim=1)
         predictions_top_3 = torch.zeros_like(probs)
         predictions_top_3.scatter_(1, top_3_indices, 1)
-        
+
         # Method 2: Top-2 Selection
         k = 2
         _, top_2_indices = torch.topk(probs, k, dim=1)
         predictions_top_2 = torch.zeros_like(probs)
         predictions_top_2.scatter_(1, top_2_indices, 1)
-        
+
         # Method 2: Top-1 Selection
         k = 1
         _, top_1_indices = torch.topk(probs, k, dim=1)
@@ -176,13 +198,16 @@ class ClassificationMetricsAccumulator:
         predictions_percentile = (probs > percentile_threshold).int()
 
         # Store all types of predictions
-        self._accumulate_data_multi_label(targets, {
-            'adaptive': predictions_adaptive,
-            'top_3': predictions_top_3,
-            'top_2': predictions_top_2,
-            'top_1': predictions_top_1,
-            'percentile': predictions_percentile
-        })
+        self._accumulate_data_multi_label(
+            targets,
+            {
+                "adaptive": predictions_adaptive,
+                "top_3": predictions_top_3,
+                "top_2": predictions_top_2,
+                "top_1": predictions_top_1,
+                "percentile": predictions_percentile,
+            },
+        )
 
         if self.iteration % self.update_frequency == 0:
             self.report_multi_label_statistics()
@@ -191,25 +216,38 @@ class ClassificationMetricsAccumulator:
         if len(self.accumulated_predictions) > 0:
             targets = torch.stack([t for t, _ in self.accumulated_predictions])
             predictions = {
-                method: torch.stack([p[method] for _, p in self.accumulated_predictions])
-                for method in ['adaptive', 'top_3', 'top_2', 'top_1', 'percentile']
+                method: torch.stack(
+                    [p[method] for _, p in self.accumulated_predictions]
+                )
+                for method in ["adaptive", "top_3", "top_2", "top_1", "percentile"]
             }
 
             # Squeeze the extra dimension
             targets = targets.squeeze(0).numpy().astype(int)
-            predictions = {method: preds.squeeze(0).numpy() for method, preds in predictions.items()}
+            predictions = {
+                method: preds.squeeze(0).numpy()
+                for method, preds in predictions.items()
+            }
 
             for method, preds in predictions.items():
                 report = self.generate_report(targets, preds, multi_label=True)
-                
+
                 # Add method-specific prefix to metric names
                 report = {f"{method}_{k}": v for k, v in report.items()}
-                
+
                 # Multi-label statistics
-                report[f"{self.name}_{method}_hamming_loss"] = hamming_loss(targets, preds)
-                report[f"{self.name}_{method}_jaccard"] = jaccard_score(targets, preds, average="samples", zero_division=0.0)
-                report[f"{self.name}_{method}_accuracy"] = accuracy_score(targets, preds, normalize=True, sample_weight=None)
-                report[f"{self.name}_{method}_exact_match_ratio"] = (preds == targets).all(axis=1).mean()
+                report[f"{self.name}_{method}_hamming_loss"] = hamming_loss(
+                    targets, preds
+                )
+                report[f"{self.name}_{method}_jaccard"] = jaccard_score(
+                    targets, preds, average="samples", zero_division=0.0
+                )
+                report[f"{self.name}_{method}_accuracy"] = accuracy_score(
+                    targets, preds, normalize=True, sample_weight=None
+                )
+                report[f"{self.name}_{method}_exact_match_ratio"] = (
+                    (preds == targets).all(axis=1).mean()
+                )
 
                 wandb.log(report)
 
@@ -222,8 +260,12 @@ class ClassificationMetricsAccumulator:
                 {
                     title: wandb.plot.confusion_matrix(
                         probs=None,
-                        y_true=[t.numpy().item() for t in self.accumulated_targets_epoch],
-                        preds=[p.numpy().item() for p in self.accumulated_predictions_epoch],
+                        y_true=[
+                            t.numpy().item() for t in self.accumulated_targets_epoch
+                        ],
+                        preds=[
+                            p.numpy().item() for p in self.accumulated_predictions_epoch
+                        ],
                         class_names=self.answer_space,
                         title=title,
                     )
@@ -232,7 +274,7 @@ class ClassificationMetricsAccumulator:
         self.accumulated_predictions_epoch = []
         self.accumulated_targets_epoch = []
         self.epoch += 1
-    
+
     def _accumulate_data_multi_class(self, targets, predictions):
         self.accumulated_predictions.extend(predictions)
         self.accumulated_targets.extend(targets)
@@ -245,7 +287,6 @@ class ClassificationMetricsAccumulator:
 
 
 class GeneratorMetricsAccumulator:
-
     def __init__(self, tokenizer, sbert, name, update_frequency):
         self.tokenizer = tokenizer
         self.iteration = 0
@@ -257,34 +298,33 @@ class GeneratorMetricsAccumulator:
         self.update_frequency = update_frequency
 
     def sbert_similarity(self, logits, _targets):
-
         # Convert logits to predicted token indices: shape: (batch_size, sequence_length)
-        predictions = torch.argmax(logits, dim=-1) 
-        
+        predictions = torch.argmax(logits, dim=-1)
+
         # Decode predictions and targets into sentences
         sentences1 = self.tokenizer.batch_decode(predictions, skip_special_tokens=True)
         sentences2 = self.tokenizer.batch_decode(_targets, skip_special_tokens=True)
-        
+
         # Encode sentences into embeddings
         embeddings1 = self.sbert.encode(sentences1, convert_to_tensor=True)
         embeddings2 = self.sbert.encode(sentences2, convert_to_tensor=True)
-        
+
         # Calculate cosine similarity between embeddings
         cosine_scores = util.pytorch_cos_sim(embeddings1, embeddings2)
-        
+
         # Average the cosine scores across the batch dimension
         return cosine_scores.mean().item()
-    
+
     def log_metrics(self, outputs, labels):
         loss = outputs.loss.clone().detach().cpu()
         predictions = outputs.logits.clone().detach().cpu()
         targets = labels.clone().detach().cpu()
         self.iteration += 1
         self._accumulate_data(targets, predictions, loss)
-        
+
         if self.iteration % self.update_frequency == 0:
             self.report()
-    
+
     def report(self):
         predictions = self.accumulated_predictions
         targets = self.accumulated_targets
@@ -305,14 +345,20 @@ class GeneratorMetricsAccumulator:
         for loss, target, prediction in zip(accumulated_loss, targets, predictions):
             metrics = {
                 f"{self.name}_loss": loss.item(),
-                f"{self.name}_sbert_similarity": self.sbert_similarity(prediction, target),
+                f"{self.name}_sbert_similarity": self.sbert_similarity(
+                    prediction, target
+                ),
                 f"{self.name}_perplexity": self.calculate_perplexity(loss).item(),
                 f"{self.name}_bleu": self.adapted_bleu_score(prediction, target),
-                f"{self.name}_token_accuracy": self.token_level_accuracy(prediction, target).item(),
+                f"{self.name}_token_accuracy": self.token_level_accuracy(
+                    prediction, target
+                ).item(),
                 f"{self.name}_entropy": self.entropy_of_predictions(prediction).item(),
-                f"{self.name}_top_5_accuracy": self.top_k_accuracy(prediction.to("cpu"), target, k=5).item(),
+                f"{self.name}_top_5_accuracy": self.top_k_accuracy(
+                    prediction.to("cpu"), target, k=5
+                ).item(),
             }
-            
+
             # Accumulate the metrics
             for key, value in metrics.items():
                 accumulated_metrics[key] += value
@@ -320,9 +366,11 @@ class GeneratorMetricsAccumulator:
         # Compute the average of each metric
         num_samples = len(accumulated_loss)
         if num_samples > 0:
-            averaged_metrics = {key: value / num_samples for key, value in accumulated_metrics.items()}
+            averaged_metrics = {
+                key: value / num_samples for key, value in accumulated_metrics.items()
+            }
             wandb.log(averaged_metrics)
-            
+
         self.accumulated_predictions = []
         self.accumulated_targets = []
         self.accumulated_loss = []
@@ -344,25 +392,27 @@ class GeneratorMetricsAccumulator:
     def adapted_bleu_score(self, logits, targets):
         smoothing = SmoothingFunction().method1
         batch_size = logits.size(0)
-        
+
         bleu_scores = []
-        
+
         # Convert logits to predicted token indices
-        predictions = torch.argmax(logits, dim=-1)  # shape: (batch_size, sequence_length)
-        
+        predictions = torch.argmax(
+            logits, dim=-1
+        )  # shape: (batch_size, sequence_length)
+
         for i in range(batch_size):
             pred_text = self.tokenizer.decode(predictions[i], skip_special_tokens=True)
             target_text = self.tokenizer.decode(targets[i], skip_special_tokens=True)
-            
+
             # Calculate BLEU score
             bleu_score = sentence_bleu(
-                [target_text.split()], 
-                pred_text.split(), 
-                smoothing_function=smoothing, 
-                weights=(0.5, 0.5)
+                [target_text.split()],
+                pred_text.split(),
+                smoothing_function=smoothing,
+                weights=(0.5, 0.5),
             )
             bleu_scores.append(bleu_score)
-        
+
         # Return the average BLEU score across the batch
         return sum(bleu_scores) / len(bleu_scores)
 
@@ -379,12 +429,12 @@ class GeneratorMetricsAccumulator:
 
 
 def read_wandb_id(file):
-    with open(file, 'r') as file:
+    with open(file, "r") as file:
         # Read the content of the file
         content = file.read().strip()
 
         # Convert the content to an integer
-        number = int(content.split(' ')[-1])
+        number = int(content.split(" ")[-1])
         return number
 
 
@@ -392,7 +442,7 @@ def read_wandb_id(file):
 def without_seed():
     # Save the current state
     state = random.getstate()
-    
+
     try:
         # Temporarily ignore the seed (use system randomness)
         random.seed(None)
@@ -401,14 +451,16 @@ def without_seed():
         # Restore the original state
         random.setstate(state)
 
+
 def write_wandb_id(file):
     id = get_id()
-    
-    with open(file, 'a') as file:
+
+    with open(file, "a") as file:
         # Read the content of the file
         file.write(str(f"{id} "))
         file.close()
     return id
+
 
 def get_id():
     with without_seed():

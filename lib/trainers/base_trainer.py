@@ -14,15 +14,28 @@ from peft import LoraConfig
 from sentence_transformers import SentenceTransformer, util
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import Blip2ForConditionalGeneration, Blip2Processor, PreTrainedModel
+from transformers import Blip2ForConditionalGeneration, Blip2Processor
 from lib.models.base_classifier import Blip2BaseClassifier
 from lib.models.blip2_generator_experiment1 import Blip2GeneratorExperiment1
 from lib.utils import get_id
 import wandb
 from lib.representations import ModelFactory
 
-from ..types import SAVE_PATHS, CustomDataset, FileNames, State, TrainingParameters, VQAParameters
-from ..utils import EXPERIMENT, ROOT_DATA_DIR, format_time, read_wandb_id, write_wandb_id
+from ..types import (
+    SAVE_PATHS,
+    CustomDataset,
+    FileNames,
+    State,
+    TrainingParameters,
+    VQAParameters,
+)
+from ..utils import (
+    EXPERIMENT,
+    ROOT_DATA_DIR,
+    format_time,
+    read_wandb_id,
+    write_wandb_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +198,9 @@ class TorchBase(ABC):
         reset = Style.RESET_ALL
 
         # Start training
-        for epoch in range(self.state.current_epoch, self.hyperparameters.num_epochs + 1):
+        for epoch in range(
+            self.state.current_epoch, self.hyperparameters.num_epochs + 1
+        ):
             # Train for one epoch
             train_loss = self.train_one_epoch(epoch=epoch)
 
@@ -202,7 +217,9 @@ class TorchBase(ABC):
 
             # Save the best result
             if val_loss <= best_epoch_loss:
-                print(f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})")
+                print(
+                    f"{blue}Validation Loss Improved ({best_epoch_loss} ---> {val_loss})"
+                )
                 # Update best loss
                 best_epoch_loss = val_loss
                 # Saving the epoch which is supposed to be the next
@@ -282,7 +299,9 @@ class TorchBase(ABC):
         bar = tqdm(enumerate(self.train_dataloader), total=len(self.train_dataloader))
         for step, data in bar:
             # Unpack the batch
-            input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(data)
+            input_ids, pixel_values, attention_mask, labels = (
+                self.send_to_device_if_needed(data)
+            )
 
             # Current batch size, can be less than self.batch_size for the last batch
             batch_size = input_ids.size(0)
@@ -345,13 +364,13 @@ class TorchBase(ABC):
             bar = tqdm(enumerate(self.val_dataloader), total=len(self.val_dataloader))
             for step, data in bar:
                 # Unpack the collator values
-                input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(
-                    data
+                input_ids, pixel_values, attention_mask, labels = (
+                    self.send_to_device_if_needed(data)
                 )
 
                 # Get the batch size
                 batch_size = input_ids.size(0)
-                
+
                 # Prepare arguments for the model's forward method
                 model_kwargs = {
                     "input_ids": input_ids,
@@ -359,13 +378,13 @@ class TorchBase(ABC):
                     "labels": labels,
                     "attention_mask": attention_mask,
                 }
-                
+
                 # Add the extract_features parameter only during classification
                 if hasattr(self.model, "classifier"):
                     model_kwargs["extract_features"] = "val"
 
                 outputs = self.model(**model_kwargs)
-                
+
                 loss = outputs.loss
 
                 self.on_batch_processed(outputs, labels)
@@ -395,7 +414,9 @@ class TorchBase(ABC):
         return cosine_scores.item()
 
     def add_logger(self):
-        Path(f"{ROOT_DATA_DIR}/logs/{self.model_name}").mkdir(parents=True, exist_ok=True)
+        Path(f"{ROOT_DATA_DIR}/logs/{self.model_name}").mkdir(
+            parents=True, exist_ok=True
+        )
 
         handler = logging.FileHandler(
             filename=f"{ROOT_DATA_DIR}/logs/{self.model_name}/{datetime.now().strftime('%m_%d_%Y_%H_%M.log')}"
@@ -448,7 +469,9 @@ class TorchBase(ABC):
         pass
 
     @abstractmethod
-    def save_trainer_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
+    def save_trainer_state(
+        self, best_epoch_loss, history, epoch, dataloader: DataLoader
+    ):
         pass
 
     @abstractmethod

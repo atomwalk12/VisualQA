@@ -52,7 +52,6 @@ class DatabaseBase(CustomDataset, ABC):
 
         self.is_testing = params.is_testing
         self.use_raw_dataset = False
-        
 
     def initialize_dataset(self):
         # Prepare the dataset for training

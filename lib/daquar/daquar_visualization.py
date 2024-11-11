@@ -6,7 +6,7 @@ class VisualizationDaquarGeneration(DaquarGeneration):
     def __init__(self, params: VQAParameters):
         super().__init__(params)
 
-    def __getitem__(self, idx):        
+    def __getitem__(self, idx):
         # Encode the dataset item
         item = self.dataset[idx]
 
@@ -21,7 +21,7 @@ class VisualizationDaquarGeneration(DaquarGeneration):
 
         # remove batch dimension
         encoding = {k: v.squeeze() for k, v in encoding.items()}
-        
+
         encoding["labels"] = encoding["input_ids"]
-        
+
         return encoding, idx

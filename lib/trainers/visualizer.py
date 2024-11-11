@@ -12,10 +12,8 @@ import umap
 from colorama import Fore
 from tqdm import tqdm
 
-from lib.daquar.daquar_visualization import \
-    VisualizationDaquarGeneration
-from lib.easy_vqa.easyvqa_visualization import \
-    VisualizationEasyVQAGeneration
+from lib.daquar.daquar_visualization import VisualizationDaquarGeneration
+from lib.easy_vqa.easyvqa_visualization import VisualizationEasyVQAGeneration
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
 from lib.types import TrainingParameters
@@ -23,9 +21,8 @@ from lib.utils import format_time
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-from lib.types import SAVE_PATHS, DatasetTypes, FileNames, ModelTypes, State
+from lib.types import DatasetTypes, FileNames, State
 from ..types import DatasetTypes, FileNames
-from .base_trainer import TorchBase
 from ..daquar.daquar_base import DaquarDatasetBase
 from ..easy_vqa.easyvqa_base import EasyVQADatasetBase
 
@@ -52,7 +49,9 @@ class VisualizeGenerator(GenerationTrainer):
         bar = tqdm(enumerate(self.train_dataloader), total=len(self.train_dataloader))
         for step, (data, indices) in bar:
             # Unpack the batch
-            input_ids, pixel_values, attention_mask, labels = self.send_to_device_if_needed(data)
+            input_ids, pixel_values, attention_mask, labels = (
+                self.send_to_device_if_needed(data)
+            )
 
             # Generate the output
             outputs = self.model(
@@ -62,7 +61,10 @@ class VisualizeGenerator(GenerationTrainer):
                 attention_mask=attention_mask,
             )
             self.state.history["items"].append(
-                [self.train_dataloader.dataset.raw_dataset[idx.item()]["image"] for idx in indices]
+                [
+                    self.train_dataloader.dataset.raw_dataset[idx.item()]["image"]
+                    for idx in indices
+                ]
             )
 
             self.update_state_with_embeddings(outputs)
@@ -70,16 +72,23 @@ class VisualizeGenerator(GenerationTrainer):
         # Now report the results
         end = time.time()
         time_elapsed = end - start
-        print(f"{self.blue}Generating embeddings completed in {format_time(time_elapsed)}")
+        print(
+            f"{self.blue}Generating embeddings completed in {format_time(time_elapsed)}"
+        )
         print()
 
-        self.state.save_state_to_file(self.best_path, file_name=FileNames.UMAPEmbedding.format(self.config.split))
+        self.state.save_state_to_file(
+            self.best_path, file_name=FileNames.UMAPEmbedding.format(self.config.split)
+        )
 
         return self.state
 
     def display(self, history, filename, num_samples=80):
         # umap reducer
-        data = torch.concatenate([embedding["pooler_output"] for embedding in history.history["embeddings"]], axis=0)
+        data = torch.concatenate(
+            [embedding["pooler_output"] for embedding in history.history["embeddings"]],
+            axis=0,
+        )
         items = [item for sublist in history.history["items"] for item in sublist]
         reducer = umap.UMAP()
         embeddings = reducer.fit_transform(data)
@@ -116,6 +125,7 @@ class VisualizeGenerator(GenerationTrainer):
         else:
             return VisualizationDaquarGeneration(args)
 
+
 class VisualizeClassifier(ClassificationTrainer):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
@@ -125,22 +135,31 @@ class VisualizeClassifier(ClassificationTrainer):
             self.answer_space = EasyVQADatasetBase.get_answer()
 
     def confusion_matrix(self, matrix: State):
-        all_preds = matrix.history['confusion_predictions']
-        all_labels = matrix.history['confusion_labels']
-        
+        all_preds = matrix.history["confusion_predictions"]
+        all_labels = matrix.history["confusion_labels"]
+
         # Compute confusion matrix
-        cm = confusion_matrix(all_labels, all_preds, labels=range(len(self.answer_space)))
+        cm = confusion_matrix(
+            all_labels, all_preds, labels=range(len(self.answer_space))
+        )
 
         # Plot the confusion matrix
         fig = plt.figure(figsize=(20, 20))
-        sns.heatmap(cm, annot=False, cmap='Blues', xticklabels=self.answer_space, yticklabels=self.answer_space)
-        plt.xlabel('Predicted')
-        plt.ylabel('True')
-        plt.title('Confusion Matrix')
+        sns.heatmap(
+            cm,
+            annot=False,
+            cmap="Blues",
+            xticklabels=self.answer_space,
+            yticklabels=self.answer_space,
+        )
+        plt.xlabel("Predicted")
+        plt.ylabel("True")
+        plt.title("Confusion Matrix")
         plt.show()
-        fig.savefig(f"{self.best_path}/{FileNames.ConfusionMatrixPDF.format(self.config.split)}")
-        
-    
+        fig.savefig(
+            f"{self.best_path}/{FileNames.ConfusionMatrixPDF.format(self.config.split)}"
+        )
+
     def load_confusion_matrix(self, split):
         state = State()
         return state.load_state(self.best_path, FileNames.ConfusionMatrix.format(split))

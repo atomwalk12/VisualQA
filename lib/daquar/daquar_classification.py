@@ -26,7 +26,7 @@ class DaquarClassification(DaquarDatasetBase):
         # Encode each label as a one-hot vector and add it to the multi-hot vector
         if self.multi_class_classifier:
             assert len(labels) == 1, "Multi-class classifier requires a single label"
-            
+
         for label in labels:
             digit = self.answers_to_id[label]
             one_hot_label = F.one_hot(torch.tensor(digit), len(self.answer_space))

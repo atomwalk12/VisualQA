@@ -7,12 +7,16 @@ from transformers import (
     AutoModel,
     AutoProcessor,
     BitsAndBytesConfig,
-    Blip2ForConditionalGeneration,
     Blip2Processor,
     Conv1D,
 )
 
-from .types import MODEL_CLASS_MAPPING, MODEL_REPO_MAPPING, PROCESSOR_CLASS_MAPPING, ModelTypes, DatasetTypes
+from .types import (
+    MODEL_CLASS_MAPPING,
+    MODEL_REPO_MAPPING,
+    PROCESSOR_CLASS_MAPPING,
+    ModelTypes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +29,9 @@ class ModelFactory:
         # Recursively visit all modules and submodules
         for name, module in model.named_modules():
             # Check if the module is an instance of the specified layers
-            if isinstance(module, (torch.nn.Linear, torch.nn.Embedding, torch.nn.Conv2d, Conv1D)):
+            if isinstance(
+                module, (torch.nn.Linear, torch.nn.Embedding, torch.nn.Conv2d, Conv1D)
+            ):
                 # model name parsing
                 layer_names.append(name)
 
@@ -52,7 +58,11 @@ class ModelFactory:
         )
 
     def get_models(
-        model_name: ModelTypes, apply_lora: bool, lora_config, bnb_config: BitsAndBytesConfig, torch_dtype
+        model_name: ModelTypes,
+        apply_lora: bool,
+        lora_config,
+        bnb_config: BitsAndBytesConfig,
+        torch_dtype,
     ) -> Tuple[AutoModel, AutoProcessor]:
         """
         Get the model for a given model type.
@@ -73,22 +83,26 @@ class ModelFactory:
         repo_id: str = MODEL_REPO_MAPPING[model_name]
         model_class = MODEL_CLASS_MAPPING[model_name]
 
-        model = model_class.from_pretrained(repo_id, torch_dtype=torch_dtype, quantization_config=bnb_config)
+        model = model_class.from_pretrained(
+            repo_id, torch_dtype=torch_dtype, quantization_config=bnb_config
+        )
 
         if apply_lora:
-            model = ModelFactory.prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+            model = ModelFactory.prepare_model_for_kbit_training(
+                model, use_gradient_checkpointing=True
+            )
             model = get_peft_model(model, lora_config)
             model.print_trainable_parameters()
 
         return model
-    
+
     def get_processor(model_name):
         repo_id: str = MODEL_REPO_MAPPING[model_name]
         processor_class: Blip2Processor = PROCESSOR_CLASS_MAPPING[model_name]
-        
+
         processor = processor_class.from_pretrained(repo_id)
         return processor
-        
+
     def prepare_model_for_kbit_training(model, use_gradient_checkpointing):
         return prepare_model_for_kbit_training(
             model,

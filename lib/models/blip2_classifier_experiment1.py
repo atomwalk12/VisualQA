@@ -109,4 +109,3 @@ class Blip2ClassifierExperiment1(Blip2BaseClassifier):
         outputs.logits = logits
 
         return outputs
-

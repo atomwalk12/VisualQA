@@ -1,14 +1,11 @@
 import logging
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 import torch
-from scipy.stats import gaussian_kde
 from sklearn.preprocessing import StandardScaler
 from umap import UMAP
 import colorsys
@@ -37,8 +34,12 @@ class FeatureVisualizer:
             random_state=42,
         )
         self.dataset_name = dataset_name
-        self.best_path = SAVE_PATHS.BLIP2_Classifier_DAQUAR if dataset_name == "daquar" else SAVE_PATHS.BLIP2_Classifier_EasyVQA
-        
+        self.best_path = (
+            SAVE_PATHS.BLIP2_Classifier_DAQUAR
+            if dataset_name == "daquar"
+            else SAVE_PATHS.BLIP2_Classifier_EasyVQA
+        )
+
     def accumulate_features(self, features, labels, split):
         if split == "train":
             self.accumulated_features_train.append(features)
@@ -46,20 +47,20 @@ class FeatureVisualizer:
         elif split == "val":
             self.accumulated_features_valid.append(features)
             self.accumulated_labels_valid.append(labels)
-    
+
     def get_features(self, split):
         if split == "train":
             features = {
                 "features": self.accumulated_features_train,
-                "labels": self.accumulated_labels_train
+                "labels": self.accumulated_labels_train,
             }
         elif split == "val":
             features = {
                 "features": self.accumulated_features_valid,
-                "labels": self.accumulated_labels_valid
+                "labels": self.accumulated_labels_valid,
             }
         return features
-    
+
     def set_features(self, features, labels, split):
         if split == "train":
             self.accumulated_features_train = features
@@ -68,18 +69,29 @@ class FeatureVisualizer:
             self.accumulated_features_valid = features
             self.accumulated_labels_valid = labels
         self.split = split
-    
+
     def reset(self, epoch, is_better):
-        print(f"Saving feature map to {self.best_path}/images/{is_better}_{self.dataset_name}_{epoch}_features")
+        print(
+            f"Saving feature map to {self.best_path}/images/{is_better}_{self.dataset_name}_{epoch}_features"
+        )
         self.split = "val"
-        self.visualize_features_with_umap(f"{self.best_path}/images/{is_better}_{self.dataset_name}_{epoch}_features", show=False)
+        self.visualize_features_with_umap(
+            f"{self.best_path}/images/{is_better}_{self.dataset_name}_{epoch}_features",
+            show=False,
+        )
         self.accumulated_features_train = []
         self.accumulated_labels_train = []
         self.accumulated_features_valid = []
         self.accumulated_labels_valid = []
 
     def visualize_features_with_umap(
-        self, save_path, interactive=True, save_format="html", sample_size=5000, aggregate=False, show=True
+        self,
+        save_path,
+        interactive=True,
+        save_format="html",
+        sample_size=5000,
+        aggregate=False,
+        show=True,
     ):
         """
         Visualize the features that are aggregated by the classifier.
@@ -95,13 +107,13 @@ class FeatureVisualizer:
             )
 
         umap_embedding = self.umap_model.fit_transform(scaled_features)
-        
+
         # Convert one-hot encoded labels to class indices
         label_indices = np.argmax(labels, axis=1)
-        
+
         # Get class names using the indices
         class_names = np.array([self.id_to_answer[idx] for idx in label_indices])
-        
+
         colors = self._prepare_colors(label_indices)
 
         if interactive:
@@ -113,11 +125,19 @@ class FeatureVisualizer:
 
     def _prepare_data(self):
         if self.split == "train":
-            features = torch.cat(self.accumulated_features_train, dim=0).detach().cpu().numpy()
-            labels = torch.cat(self.accumulated_labels_train, dim=0).detach().cpu().numpy()
+            features = (
+                torch.cat(self.accumulated_features_train, dim=0).detach().cpu().numpy()
+            )
+            labels = (
+                torch.cat(self.accumulated_labels_train, dim=0).detach().cpu().numpy()
+            )
         elif self.split == "val":
-            features = torch.cat(self.accumulated_features_valid, dim=0).detach().cpu().numpy()
-            labels = torch.cat(self.accumulated_labels_valid, dim=0).detach().cpu().numpy()
+            features = (
+                torch.cat(self.accumulated_features_valid, dim=0).detach().cpu().numpy()
+            )
+            labels = (
+                torch.cat(self.accumulated_labels_valid, dim=0).detach().cpu().numpy()
+            )
         return features, labels
 
     def _scale_features(self, features):
@@ -163,15 +183,22 @@ class FeatureVisualizer:
         else:
             color_map = base_colors[:num_colors]
 
-        label_to_color = {label: color for label, color in zip(unique_labels, color_map)}
+        label_to_color = {
+            label: color for label, color in zip(unique_labels, color_map)
+        }
         return [label_to_color[label] for label in label_indices]
 
     def _generate_colors(self, n):
         HSV_tuples = [(x * 1.0 / n, 0.5, 0.5) for x in range(n)]
         RGB_tuples = map(lambda x: colorsys.hsv_to_rgb(*x), HSV_tuples)
-        return ['rgb({},{},{})'.format(int(r * 255), int(g * 255), int(b * 255)) for r, g, b in RGB_tuples]
+        return [
+            "rgb({},{},{})".format(int(r * 255), int(g * 255), int(b * 255))
+            for r, g, b in RGB_tuples
+        ]
 
-    def _create_interactive_plot(self, umap_embedding, colors, class_names, save_format, save_path, show=True):
+    def _create_interactive_plot(
+        self, umap_embedding, colors, class_names, save_format, save_path, show=True
+    ):
         unique_classes = np.unique(class_names)
         traces = []
 
@@ -190,7 +217,7 @@ class FeatureVisualizer:
                     text=class_names[mask],
                     hoverinfo="text+x+y",
                     name=class_name,
-                    showlegend=True
+                    showlegend=True,
                 )
             )
 
@@ -199,36 +226,30 @@ class FeatureVisualizer:
         fig.update_layout(
             title=dict(
                 text=f"UMAP feature projections ({self.split})",
-                font=dict(size=24)  # Increased title font size
+                font=dict(size=24),  # Increased title font size
             ),
             xaxis_title=dict(
                 text="UMAP1",
-                font=dict(size=18)  # Increased axis title font size
+                font=dict(size=18),  # Increased axis title font size
             ),
-            yaxis_title=dict(
-                text="UMAP2",
-                font=dict(size=18)
-            ),
-            legend_title=dict(
-                text="Classes",
-                font=dict(size=18)
-            ),
+            yaxis_title=dict(text="UMAP2", font=dict(size=18)),
+            legend_title=dict(text="Classes", font=dict(size=18)),
             legend=dict(
                 yanchor="top",
                 y=0.99,
                 xanchor="left",
                 x=1.05,
-                font=dict(size=14)  # Increased legend font size
+                font=dict(size=14),  # Increased legend font size
             ),
             width=1000,
             height=800,
-            hovermode="closest"
+            hovermode="closest",
         )
 
         # Increase axis label font sizes
         fig.update_xaxes(showgrid=False, tickfont=dict(size=14))
         fig.update_yaxes(showgrid=False, tickfont=dict(size=14))
-            
+
         if show:
             if save_format == "html":
                 pio.write_html(fig, file=f"{save_path}.html")

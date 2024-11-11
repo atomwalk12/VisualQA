@@ -1,9 +1,7 @@
 import argparse
 import gc
 import logging
-import warnings
 
-import sys
 
 from lib.trainers.classification_trainer import ClassificationTrainer
 from lib.trainers.generation_trainer import GenerationTrainer
@@ -50,15 +48,12 @@ def get_parser() -> argparse.ArgumentParser:
         default=Suffix.Train,
     )
 
-    # Same semnatics as in --train
     parser.add_argument(
         "--val-split",
         type=str,
         help="Number of validation examples to generate.",
         default=Suffix.Val,
     )
-
-    # Whether to use the lightning trainer or not
 
     parser.add_argument(
         "--seed",

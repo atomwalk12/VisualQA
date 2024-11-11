@@ -9,6 +9,7 @@ from .base_classifier import Blip2BaseClassifier, Blip2ClassifierConfig
 
 logger = logging.getLogger(__name__)
 
+
 class Blip2ClassifierExperiment3(Blip2BaseClassifier):
     """This is the third classifier I used. It is a MLP classifier however the pooler_output
     of the qformer are being used instead of the last hidden state.

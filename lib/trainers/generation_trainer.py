@@ -9,14 +9,12 @@ from peft.peft_model import PeftModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import BitsAndBytesConfig
-from transformers.models.blip_2.modeling_blip_2 import Blip2ForConditionalGenerationModelOutput
+from transformers.models.blip_2.modeling_blip_2 import (
+    Blip2ForConditionalGenerationModelOutput,
+)
 import torch
-import torch.nn.functional as F
-import numpy as np
-from nltk.translate.bleu_score import sentence_bleu
 from ..utils import GeneratorMetricsAccumulator
 import wandb
-from transformers import Blip2Processor
 from config import Repositories
 
 from ..daquar.daquar_generation import DaquarGeneration
@@ -34,8 +32,12 @@ class GenerationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
         self.state_update_frequency = 32
-        self.train_accumulator = GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Train, update_frequency=1)
-        self.val_accumulator =  GeneratorMetricsAccumulator(self.processor.tokenizer, self.sbert, Suffix.Val, update_frequency=1)
+        self.train_accumulator = GeneratorMetricsAccumulator(
+            self.processor.tokenizer, self.sbert, Suffix.Train, update_frequency=1
+        )
+        self.val_accumulator = GeneratorMetricsAccumulator(
+            self.processor.tokenizer, self.sbert, Suffix.Val, update_frequency=1
+        )
 
     def get_repository(self):
         if self.dataset_name == DatasetTypes.DAQUAR:
@@ -51,8 +53,10 @@ class GenerationTrainer(TorchBase):
 
     def load_from_checkpoint(self, is_trainable):
         base_model = self.get_models(apply_lora=False)
-        
-        base_model = ModelFactory.prepare_model_for_kbit_training(base_model, use_gradient_checkpointing=True)
+
+        base_model = ModelFactory.prepare_model_for_kbit_training(
+            base_model, use_gradient_checkpointing=True
+        )
 
         local_model_path = self.best_path
         model = PeftModel.from_pretrained(
@@ -66,12 +70,12 @@ class GenerationTrainer(TorchBase):
         return model
 
     def bootstrap_model(self, answer_space):
-        model = self.get_models(apply_lora=True)            
+        model = self.get_models(apply_lora=True)
 
         model = Blip2GeneratorExperiment1(model)
-        
+
         return model
-    
+
     def test(self):
         self.model.eval()
         history = self.state.history
@@ -93,7 +97,9 @@ class GenerationTrainer(TorchBase):
                     attention_mask=attention_mask,
                     max_new_tokens=5,
                 )
-                generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+                generated_text = self.processor.batch_decode(
+                    generated_ids, skip_special_tokens=True
+                )
 
                 max_similarity = 0
                 for sample, label in zip(itertools.repeat(generated_text), labels):
@@ -113,7 +119,9 @@ class GenerationTrainer(TorchBase):
 
                 # Save the state
                 if step % self.state_update_frequency == 0:
-                    self.save_trainer_state(similarity, history, step + 1, self.test_dataloader)
+                    self.save_trainer_state(
+                        similarity, history, step + 1, self.test_dataloader
+                    )
 
         # Finally save the entire run results
         self.save_trainer_state(similarity, history, step + 1, self.test_dataloader)
@@ -139,14 +147,26 @@ class GenerationTrainer(TorchBase):
         elif self.dataset_name == DatasetTypes.DAQUAR:
             return DaquarGeneration(args)
 
-    def update_state_with_embeddings(self, embeddings: Blip2ForConditionalGenerationModelOutput):
+    def update_state_with_embeddings(
+        self, embeddings: Blip2ForConditionalGenerationModelOutput
+    ):
         # this is done for every iteration
-        embeddings = {"pooler_output": embeddings.qformer_outputs.pooler_output.to("cpu")}
+        embeddings = {
+            "pooler_output": embeddings.qformer_outputs.pooler_output.to("cpu")
+        }
         self.state.history["embeddings"].append(embeddings)
 
-    def save_trainer_state(self, best_epoch_loss, history, epoch, dataloader: DataLoader):
+    def save_trainer_state(
+        self, best_epoch_loss, history, epoch, dataloader: DataLoader
+    ):
         self.state.save_state(
-            self.best_path, best_epoch_loss, history, epoch, self.scheduler, self.optimizer, dataloader.dataset
+            self.best_path,
+            best_epoch_loss,
+            history,
+            epoch,
+            self.scheduler,
+            self.optimizer,
+            dataloader.dataset,
         )
 
     def get_models(self, apply_lora):
@@ -183,9 +203,9 @@ class GenerationTrainer(TorchBase):
                 lora_dropout=0.1,
                 target_modules="all-linear",
                 init_lora_weights="gaussian",
-            )            
+            )
 
-    def on_batch_processed(self, outputs, labels):      
+    def on_batch_processed(self, outputs, labels):
         if self.model.training:
             self.train_accumulator.log_metrics(outputs, labels)
         else:
@@ -193,7 +213,7 @@ class GenerationTrainer(TorchBase):
 
     def on_best_epoch(self):
         pass
-    
+
     def on_epoch_end(self):
         self.train_accumulator.report()
         self.val_accumulator.report()

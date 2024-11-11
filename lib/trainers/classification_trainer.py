@@ -26,10 +26,9 @@ logger = logging.getLogger(__name__)
 class ClassificationTrainer(TorchBase):
     def __init__(self, config: TrainingParameters):
         super().__init__(config)
-        self.multi_class = True # assume multi-class classification
+        self.multi_class = True  # assume multi-class classification
         if config.train_args:
             self.multi_class = config.train_args.multi_class_classifier
-            
 
         self.train_accumulator = ClassificationMetricsAccumulator(
             self.dataset_name,
@@ -139,7 +138,7 @@ class ClassificationTrainer(TorchBase):
                     attention_mask=attention_mask,
                     labels=labels,
                 )
-                
+
                 self.on_batch_processed(outputs, labels)
 
                 _, preds = torch.max(outputs.logits, 1)
@@ -159,7 +158,6 @@ class ClassificationTrainer(TorchBase):
                 wandb.log({"SBert Similarity": best_epoch_loss})
 
                 bar.set_postfix(Batch=step, Test_Loss=best_epoch_loss)
-
 
         # Release resources
         gc.collect()

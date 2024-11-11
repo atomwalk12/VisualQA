@@ -12,7 +12,12 @@ import pandas as pd
 import torch
 from torch.optim import AdamW, lr_scheduler
 from torch.utils.data import Dataset
-from transformers import Blip2ForConditionalGeneration, Blip2Processor, Blip2ForImageTextRetrieval, AutoProcessor
+from transformers import (
+    Blip2ForConditionalGeneration,
+    Blip2Processor,
+    Blip2ForImageTextRetrieval,
+    AutoProcessor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +224,7 @@ class VQAParameters:
             and self.keep_infrequent == other.keep_infrequent
         )
 
+
 @dataclass
 class Blip2ClassificationModelOutput:
     loss: torch.FloatTensor = None
@@ -287,15 +293,23 @@ class TrainingParameters:
     scheduler: lr_scheduler.CosineAnnealingLR = None
 
     def set_optimizer_and_scheduler(self, model):
-        if self.optimizer_name == "AdamW" and self.scheduler_name == "CosineAnnealingLR":
+        if (
+            self.optimizer_name == "AdamW"
+            and self.scheduler_name == "CosineAnnealingLR"
+        ):
             self.optimizer = self.fetch_optimizer(model)
             self.scheduler = self.fetch_scheduler(self.optimizer)
-        elif self.optimizer_name == "AdamW" and self.scheduler_name == "CosineAnnealingWarmRestarts":
+        elif (
+            self.optimizer_name == "AdamW"
+            and self.scheduler_name == "CosineAnnealingWarmRestarts"
+        ):
             self.optimizer = self.fetch_optimizer(model, lr=5e-5, weight_decay=0.001)
             self.scheduler = self.fetch_scheduler(self.optimizer)
         else:
-            raise ValueError(f"Optimizer {self.optimizer_name} and scheduler {self.scheduler_name} not implemented")
-        
+            raise ValueError(
+                f"Optimizer {self.optimizer_name} and scheduler {self.scheduler_name} not implemented"
+            )
+
     def fetch_optimizer(self, model, lr=1e-4, weight_decay=1e-6):
         assert self.optimizer_name == "AdamW", "Optimizer not implemented"
 
@@ -308,7 +322,9 @@ class TrainingParameters:
                 optimizer, T_max=t_max, eta_min=min_lr
             )
         elif self.scheduler_name == "CosineAnnealingWarmRestarts":
-            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=T_0, eta_min=min_lr)
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(
+                optimizer, T_0=T_0, eta_min=min_lr
+            )
         elif self.scheduler_name is None:
             return None
 

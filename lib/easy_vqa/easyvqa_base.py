@@ -62,8 +62,7 @@ class EasyVQADatasetBase(DatabaseBase):
 
         if start is not None or end is not None:
             assert split in [choice for choice in Suffix]
-            ds = raw_dataset.map(
-                lambda example: {"stratify_column": example["answer"]})
+            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
             start = 0 if start is None else start
             end = len(ds) if end is None else end
 
@@ -81,8 +80,7 @@ class EasyVQADatasetBase(DatabaseBase):
 
             assert len(raw_dataset) == end - start
         elif self.split.startswith(Suffix.Train) or self.split.startswith(Suffix.Val):
-            ds = raw_dataset.map(
-                lambda example: {"stratify_column": example["answer"]})
+            ds = raw_dataset.map(lambda example: {"stratify_column": example["answer"]})
             ds = ds.class_encode_column("stratify_column").train_test_split(
                 test_size=0.2,
                 stratify_by_column="stratify_column",
@@ -135,7 +133,9 @@ class EasyVQADatasetBase(DatabaseBase):
         ):
             return EasyVQADatasetBase.train_dataset
 
-        if EasyVQADatasetBase.val_dataset is not None and self.split.startswith(Suffix.Val):
+        if EasyVQADatasetBase.val_dataset is not None and self.split.startswith(
+            Suffix.Val
+        ):
             return EasyVQADatasetBase.val_dataset
 
         raw_dataset = self.initialize_raw()
@@ -189,13 +189,17 @@ class EasyVQADatasetBase(DatabaseBase):
                     test_size=0.2,
                     stratify_by_column="stratify_column",
                     seed=EXPERIMENT.get_seed(),
-                    shuffle=True
+                    shuffle=True,
                 )
                 .values()
             )
             EasyVQADatasetBase.train_dataset = train_dataset
             EasyVQADatasetBase.val_dataset = test_dataset
-            result = EasyVQADatasetBase.train_dataset if self.split == Suffix.Train else EasyVQADatasetBase.val_dataset
+            result = (
+                EasyVQADatasetBase.train_dataset
+                if self.split == Suffix.Train
+                else EasyVQADatasetBase.val_dataset
+            )
 
             logger.info(f"Read {self.split} dataset, length: {len(result)}")
             return result
