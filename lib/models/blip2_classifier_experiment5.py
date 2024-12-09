@@ -54,11 +54,15 @@ class Blip2TextEmbeddings(nn.Module):
 
         if input_ids is not None:
             input_ids = input_ids.to(self.word_embeddings.weight.device)
+            
+            # Create word embeddings
             embeddings = self.word_embeddings(input_ids)
             if self.position_embedding_type == "absolute":
+                # Create positional embeddings
                 position_embeddings = self.position_embeddings(position_ids)
                 embeddings += position_embeddings
 
+            # Concatenate query embeddings with positional embeddings
             if query_embeds is not None:
                 embeddings = torch.cat((query_embeds, embeddings), dim=1)
         else:
@@ -127,6 +131,7 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
         extract_features: str = "train",
         log: bool = True,
     ):
+        # 1. Vision model
         vision_outputs = self.model.vision_model(
             pixel_values=pixel_values,
         )
@@ -137,13 +142,17 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
         )
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        
+        # 2.  Apply Q-Former on visual embeddings
         query_outputs = self.model.qformer(
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
         )
         image_embeds = query_outputs.last_hidden_state
-
+        
+        
+        # 3. Translate textual embeddings
         query_embeds = self.text_embeddings(
             input_ids=input_ids,
         )
@@ -153,7 +162,7 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
         )
         question_embeds = text_outputs.last_hidden_state
 
-        # normalized features
+        # 4,5. Project and normalize
         text_repr = F.normalize(
             self.text_projection(question_embeds[:, 0, :]), dim=-1
         )  # [batch_size, 256]
@@ -161,7 +170,7 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
             self.vision_projection(image_embeds), dim=-1
         )  # [batch_size, 32, 256]
 
-        # Flatten image representation
+        # 6. Flatten and combine
         image_repr_flat = image_repr.view(image_repr.size(0), -1)  # [batch_size, 8192]
 
         # Combine features for classification
@@ -169,7 +178,7 @@ class Blip2ClassifierExperiment(Blip2BaseClassifier):
             (text_repr, image_repr_flat), dim=-1
         )  # [batch_size, 8448]
 
-        # Classification
+        # 7. Classification
         logits = self.classifier(combined_features)
 
         if extract_features == "train":
